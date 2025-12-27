@@ -1,0 +1,11 @@
+telnyx:
+  api_url: "https://api.telnyx.com/v2/balance"
+  api_key: "YOUR_TELNYX_API_KEY"
+  threshold: 2.0
+
+notifier:
+  apprise_api_url: "https://your-custom-endpoint.com/notify"
+  apprise_service_url: "discord://webhook_id/webhook_token,mailto://user:pass@gmail.com"
+
+scheduler:
+  interval: "5m"

@@ -1,0 +1,17 @@
+# Binaries
+watchdog
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Configuration
+config.yaml
+
+# Dependency directories
+vendor/
+
+# OS metadata
+.DS_Store
+Thumbs.db
