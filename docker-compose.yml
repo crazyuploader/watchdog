@@ -1,0 +1,14 @@
+services:
+  watchdog:
+    image: ghcr.io/${DOCKER_USER:-your-gh-username}/watchdog:latest
+    container_name: watchdog
+    environment:
+      - TELNYX_API_URL=${TELNYX_API_URL}
+      - TELNYX_API_KEY=${TELNYX_API_KEY}
+      - TELNYX_THRESHOLD=${TELNYX_THRESHOLD}
+      - APPRISE_API_URL=${APPRISE_API_URL}
+      - APPRISE_SERVICE_URL=${APPRISE_SERVICE_URL}
+      - SCHEDULER_INTERVAL=${SCHEDULER_INTERVAL}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
