@@ -1,12 +1,14 @@
-# Telnyx Balance Watchdog
+# Watchdog - Monitoring Framework
 
-A lightweight Go-based service that monitors your Telnyx balance and sends notifications via a custom webhook (Apprise-compatible) when the balance falls below a configured threshold.
+A lightweight Go-based framework for monitoring various services and sending notifications via custom webhooks (Apprise-compatible) when configured thresholds are breached.
 
 ## Features
 
-- Automated monitoring of Telnyx balance
+- Framework for adding monitoring tasks
+- Currently supports Telnyx balance monitoring
 - Apprise-compatible notifications
 - Configurable via `config.yaml` or environment variables
+- Easy to extend with new monitoring tasks
 
 ## Prerequisites
 
@@ -20,7 +22,7 @@ go build -o watchdog ./cmd
 
 ## Usage
 
-Run the watchdog:
+Run the watchdog framework:
 
 ```bash
 ./watchdog
