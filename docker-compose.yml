@@ -1,6 +1,6 @@
 services:
   watchdog:
-    image: ghcr.io/${DOCKER_USER:-your-gh-username}/watchdog:latest
+    image: ghcr.io/crazyuploader/watchdog:latest
     container_name: watchdog
     environment:
       - TELNYX_API_URL=${TELNYX_API_URL}
