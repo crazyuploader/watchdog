@@ -24,6 +24,9 @@ builds:
       - arm64
       - "386"
       - arm
+    ignore:
+      - goos: windows
+        goarch: arm
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -34,7 +37,8 @@ builds:
 
 archives:
   - id: cli
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -44,9 +48,10 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
-brews:
+homebrew_casks:
   - repository:
       owner: crazyuploader
       name: homebrew-tools
@@ -54,11 +59,9 @@ brews:
     homepage: "https://github.com/crazyuploader/watchdog"
     description: "Lightweight monitoring framework for services with Apprise notifications"
     license: "MIT"
-    directory: Formula
-    test: |
-      system "#{bin}/watchdog", "--help"
-    install: |
-      bin.install "watchdog"
+    name: watchdog
+    binaries:
+      - watchdog
 
 checksum:
   name_template: "checksums.txt"
