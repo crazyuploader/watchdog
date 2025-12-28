@@ -42,7 +42,7 @@ func (t *TelnyxBalanceCheckTask) Run() error {
 		}
 
 		subject := "Telnyx Balance Alert"
-		message := fmt.Sprintf("Telnyx balance is below threshold: $%.2f", balance)
+		message := fmt.Sprintf("Your Telnyx balance ($%.2f) has fallen below the $%.2f threshold.", balance, t.threshold)
 		err = t.notifier.SendNotification(subject, message)
 		if err != nil {
 			return fmt.Errorf("failed to send notification: %v", err)
