@@ -2,6 +2,7 @@ telnyx:
   api_url: "https://api.telnyx.com/v2/balance"
   api_key: "YOUR_TELNYX_API_KEY"
   threshold: 2.0
+  notification_cooldown: "6h"
 
 notifier:
   apprise_api_url: "https://your-custom-endpoint.com/notify"

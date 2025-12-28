@@ -74,6 +74,7 @@ func runApp() {
 		appConfig.Telnyx.APIURL,
 		appConfig.Telnyx.APIKey,
 		appConfig.Telnyx.Threshold,
+		appConfig.Telnyx.GetNotificationCooldown(),
 		notif,
 	)
 

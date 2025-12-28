@@ -12,9 +12,21 @@ type Config struct {
 }
 
 type TelnyxConfig struct {
-	APIURL    string  `mapstructure:"api_url"`
-	APIKey    string  `mapstructure:"api_key"`
-	Threshold float64 `mapstructure:"threshold"`
+	APIURL               string  `mapstructure:"api_url"`
+	APIKey               string  `mapstructure:"api_key"`
+	Threshold            float64 `mapstructure:"threshold"`
+	NotificationCooldown string  `mapstructure:"notification_cooldown"`
+}
+
+func (t TelnyxConfig) GetNotificationCooldown() time.Duration {
+	if t.NotificationCooldown == "" {
+		return 6 * time.Hour // default
+	}
+	d, err := time.ParseDuration(t.NotificationCooldown)
+	if err != nil {
+		return 6 * time.Hour // default
+	}
+	return d
 }
 
 type NotifierConfig struct {
