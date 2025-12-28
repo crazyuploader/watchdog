@@ -54,7 +54,7 @@ brews:
     homepage: "https://github.com/crazyuploader/watchdog"
     description: "Lightweight monitoring framework for services with Apprise notifications"
     license: "MIT"
-    folder: Formula
+    directory: Formula
     test: |
       system "#{bin}/watchdog", "--help"
     install: |
