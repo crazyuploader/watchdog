@@ -1,23 +1,40 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
+version: 2
+
 project_name: watchdog
 
 before:
   hooks:
     - go mod tidy
+    - go generate ./...
 
 builds:
-  - env:
+  - id: cli
+    main: ./cmd
+    binary: watchdog
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
       - windows
       - darwin
-    main: ./cmd
+      - freebsd
+      - openbsd
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+      - arm
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.FullCommit}}
+      - -X main.buildDate={{.Date}}
+    flags:
+      - -trimpath
 
 archives:
-  - format: tar.gz
-    # this name template makes the OS and Arch compatible with the results of uname.
+  - id: cli
+    format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -25,16 +42,30 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
     format_overrides:
       - goos: windows
         format: zip
 
+brews:
+  - repository:
+      owner: crazyuploader
+      name: homebrew-tools
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/crazyuploader/watchdog"
+    description: "Lightweight monitoring framework for services with Apprise notifications"
+    license: "MIT"
+    folder: Formula
+    test: |
+      system "#{bin}/watchdog", "--help"
+    install: |
+      bin.install "watchdog"
+
 checksum:
   name_template: "checksums.txt"
+  algorithm: sha256
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
@@ -42,3 +73,11 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
+
+release:
+  footer: |-
+    ---
+
+    **Full Changelog**: {{ .GitURL }}/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
