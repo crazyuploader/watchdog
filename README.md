@@ -36,4 +36,4 @@ Specify a custom config file:
 
 ## License
 
-MIT
+[MIT](LICENSE)
