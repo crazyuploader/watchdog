@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -205,7 +207,16 @@ func runApp() {
 	fmt.Println("Starting scheduler...")
 	sched.Start()
 
-	// Keep the program running indefinitely
-	// The select{} statement blocks forever, allowing the scheduler goroutines to continue
-	select {}
+	// Wait for interrupt signal for graceful shutdown
+	// This allows the program to be stopped cleanly with Ctrl+C (SIGINT) or kill (SIGTERM)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	fmt.Println("Watchdog is running. Press Ctrl+C to stop.")
+	<-sigChan
+
+	// Graceful shutdown
+	fmt.Println("\nShutting down gracefully...")
+	sched.Stop()
+	fmt.Println("Shutdown complete.")
 }
