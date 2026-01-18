@@ -17,9 +17,6 @@ import (
 //
 // This implements the scheduler.Task interface via the Run() method.
 type TelnyxBalanceCheckTask struct {
-	// apiURL is the Telnyx API endpoint (usually https://api.telnyx.com/v2/balance)
-	apiURL string
-
 	// threshold is the minimum acceptable balance in dollars
 	// If balance < threshold, an alert is sent
 	threshold float64
@@ -58,7 +55,6 @@ type TelnyxBalanceCheckTask struct {
 //	)
 func NewTelnyxBalanceCheckTask(apiURL, apiKey string, threshold float64, cooldown time.Duration, notifier notifier.Notifier) *TelnyxBalanceCheckTask {
 	return &TelnyxBalanceCheckTask{
-		apiURL:               apiURL,
 		threshold:            threshold,
 		notificationCooldown: cooldown,
 		apiClient:            api.NewTelnyxAPI(apiURL, apiKey),
