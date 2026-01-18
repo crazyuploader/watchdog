@@ -165,6 +165,7 @@ type NotifierConfig struct {
 // GetServiceURLs splits the comma-separated service URL string into individual URLs.
 // Each URL represents a different notification destination (Telegram, Discord, etc.)
 // Returns an empty slice if no services are configured.
+// Empty strings (from consecutive commas or trailing commas) are filtered out.
 func (n NotifierConfig) GetServiceURLs() []string {
 	if n.AppriseServiceURL == "" {
 		return []string{}
@@ -172,7 +173,10 @@ func (n NotifierConfig) GetServiceURLs() []string {
 	parts := strings.Split(n.AppriseServiceURL, ",")
 	var urls []string
 	for _, p := range parts {
-		urls = append(urls, strings.TrimSpace(p))
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			urls = append(urls, trimmed)
+		}
 	}
 	return urls
 }
