@@ -38,7 +38,8 @@ type TelnyxAPI struct {
 // NewTelnyxAPI creates a new Telnyx API client.
 // Parameters:
 //   - apiURL: The Telnyx API endpoint (e.g., "https://api.telnyx.com/v2/balance")
-//   - apiKey: Your Telnyx API key (starts with "KEY...")
+// NewTelnyxAPI creates a TelnyxAPI client configured with the provided API URL and API key.
+// The apiKey should be a Telnyx API key (typically begins with "KEY...").
 func NewTelnyxAPI(apiURL, apiKey string) *TelnyxAPI {
 	return &TelnyxAPI{
 		APIURL: apiURL,
