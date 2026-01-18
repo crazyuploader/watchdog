@@ -16,8 +16,23 @@ github:
   stale_days: 4
   notification_cooldown: "24h"
   repositories:
-    - owner: "owner_or_username"
-      repo: "repo_name"
+    # Example 1: Monitor a repo for PRs by specific authors
+    - owner: "owner1"
+      repo: "repo1"
       authors:
-        - "author_name"
+        - "author1"
+        - "author2"
+        - "author3"
+
+    # Example 2: Monitor another repo with different authors
+    - owner: "owner2"
+      repo: "repo2"
+      authors:
+        - "author4"
+        - "author5"
+
+    # Example 3: Monitor all PRs in a repo (no author filter)
+    - owner: "owner3"
+      repo: "repo3"
+      authors: [] # Empty list = monitor all PRs regardless of author
 
