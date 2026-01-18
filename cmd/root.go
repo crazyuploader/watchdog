@@ -57,6 +57,10 @@ func init() {
 // It supports both explicit config file paths (via --config flag) and automatic discovery.
 // If no config file is specified, it looks for config.yaml in the current directory.
 // Environment variables are also automatically bound and can override config file values.
+// This function will terminate the application with a fatal error if:
+//   - The config file cannot be read
+//   - The config file cannot be unmarshaled
+//   - Required configuration fields are missing or invalid
 func initConfig() {
 	if cfgFile != "" {
 		// Use config file from the flag
@@ -71,15 +75,63 @@ func initConfig() {
 	// Read environment variables that match config keys
 	viper.AutomaticEnv()
 
-	// Read the config file
+	// Read the config file - this is fatal if it fails
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Printf("Error reading config file: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Error reading config file: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Please ensure a valid config file exists (use --config flag or create config.yaml)\n")
+		os.Exit(1)
 	}
 
-	// Unmarshal the config into our struct
+	// Unmarshal the config into our struct - this is fatal if it fails
 	if err := viper.Unmarshal(&appConfig); err != nil {
-		fmt.Printf("Unable to decode into struct: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Unable to decode config into struct: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Please check your config file format matches the expected structure\n")
+		os.Exit(1)
 	}
+
+	// Validate required configuration fields
+	if err := validateConfig(&appConfig); err != nil {
+		fmt.Fprintf(os.Stderr, "Configuration validation failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// validateConfig checks that all required configuration fields are properly set.
+// It returns an error if any critical fields are missing or invalid.
+func validateConfig(cfg *config.Config) error {
+	// Validate notifier configuration
+	if cfg.Notifier.AppriseAPIURL == "" {
+		return fmt.Errorf("notifier.apprise_api_url is required but not set")
+	}
+	if len(cfg.Notifier.GetServiceURLs()) == 0 {
+		return fmt.Errorf("notifier.apprise_service_url is required but not set")
+	}
+
+	// Validate scheduler configuration
+	if cfg.Scheduler.Interval == "" {
+		return fmt.Errorf("scheduler.interval is required but not set")
+	}
+
+	// Validate Telnyx configuration if API URL is set
+	if cfg.Tasks.Telnyx.APIURL != "" {
+		if cfg.Tasks.Telnyx.APIKey == "" {
+			return fmt.Errorf("tasks.telnyx.api_key is required when api_url is set")
+		}
+	}
+
+	// Validate GitHub configuration if repositories are configured
+	if len(cfg.Tasks.GitHub.Repositories) > 0 {
+		for i, repo := range cfg.Tasks.GitHub.Repositories {
+			if repo.Owner == "" {
+				return fmt.Errorf("tasks.github.repositories[%d].owner is required", i)
+			}
+			if repo.Repo == "" {
+				return fmt.Errorf("tasks.github.repositories[%d].repo is required", i)
+			}
+		}
+	}
+
+	return nil
 }
 
 // runApp is the main application logic that runs after CLI initialization.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // WebhookPayload represents the JSON structure sent to the Apprise API.
@@ -101,8 +102,20 @@ func (w *WebhookNotifier) SendNotification(subject, message string) error {
 		return fmt.Errorf("failed to marshal webhook payload: %v", err)
 	}
 
-	// Send the POST request to Apprise
-	resp, err := http.Post(w.WebhookURL, "application/json", bytes.NewBuffer(data))
+	// Create HTTP client with timeout to prevent hanging on slow webhook endpoints
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// Create the POST request
+	req, err := http.NewRequest("POST", w.WebhookURL, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to create webhook request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send webhook request: %v", err)
 	}

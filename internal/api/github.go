@@ -97,6 +97,7 @@ func (g *GitHubAPI) GetOpenPullRequests(owner, repo string) ([]PullRequest, erro
 
 	// Set required headers
 	req.Header.Add("Accept", "application/vnd.github.v3+json")
+	req.Header.Add("User-Agent", "watchdog-app") // GitHub requires a User-Agent header
 
 	// Add authentication if we have a token
 	// This increases rate limits from 60/hour to 5000/hour

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 // TelnyxBalanceResponse represents the JSON structure returned by the Telnyx balance API.
@@ -55,8 +56,10 @@ func NewTelnyxAPI(apiURL, apiKey string) *TelnyxAPI {
 // The balance is returned as a float so it can be easily compared with the threshold
 // configured in the application settings.
 func (t *TelnyxAPI) GetBalance() (float64, error) {
-	// Create HTTP client (no timeout set, uses default)
-	client := &http.Client{}
+	// Create HTTP client with a 10-second timeout to prevent hanging
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 
 	// Create GET request to the balance endpoint
 	req, err := http.NewRequest("GET", t.APIURL, nil)
