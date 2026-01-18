@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"strings"
 	"time"
 )
@@ -12,6 +13,21 @@ type Config struct {
 	Tasks     TasksConfig     `mapstructure:"tasks"`
 	Notifier  NotifierConfig  `mapstructure:"notifier"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
+}
+
+// parseDurationWithDefault parses a duration string and returns a default if parsing fails.
+// Logs a warning when an invalid duration string is encountered to help with debugging.
+func parseDurationWithDefault(value string, defaultDuration time.Duration, configPath string) time.Duration {
+	if value == "" {
+		return defaultDuration
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		log.Printf("Warning: Invalid duration '%s' for %s, using default %v (hint: use format like '5m', '1h', '24h')\n",
+			value, configPath, defaultDuration)
+		return defaultDuration
+	}
+	return d
 }
 
 // TasksConfig groups all task-specific configurations.
@@ -64,14 +80,7 @@ type RepositoryConfig struct {
 // Returns 24 hours if the value is empty or invalid.
 // This prevents sending duplicate notifications for the same PR too frequently.
 func (g GitHubConfig) GetNotificationCooldown() time.Duration {
-	if g.NotificationCooldown == "" {
-		return 24 * time.Hour
-	}
-	d, err := time.ParseDuration(g.NotificationCooldown)
-	if err != nil {
-		return 24 * time.Hour
-	}
-	return d
+	return parseDurationWithDefault(g.NotificationCooldown, 24*time.Hour, "tasks.github.notification_cooldown")
 }
 
 // GetStaleDays returns the number of days before a PR is considered stale.
@@ -87,14 +96,7 @@ func (g GitHubConfig) GetStaleDays() int {
 // GetInterval returns the task-specific interval if configured, otherwise the global default.
 // This allows GitHub checks to run less frequently than other tasks (e.g., every 60m to respect rate limits).
 func (g GitHubConfig) GetInterval(globalDefault time.Duration) time.Duration {
-	if g.Interval == "" {
-		return globalDefault
-	}
-	d, err := time.ParseDuration(g.Interval)
-	if err != nil {
-		return globalDefault
-	}
-	return d
+	return parseDurationWithDefault(g.Interval, globalDefault, "tasks.github.interval")
 }
 
 // TelnyxConfig holds settings for monitoring your Telnyx account balance.
@@ -121,28 +123,14 @@ type TelnyxConfig struct {
 
 // GetInterval returns the task-specific interval if configured, otherwise the global default.
 func (t TelnyxConfig) GetInterval(globalDefault time.Duration) time.Duration {
-	if t.Interval == "" {
-		return globalDefault
-	}
-	d, err := time.ParseDuration(t.Interval)
-	if err != nil {
-		return globalDefault
-	}
-	return d
+	return parseDurationWithDefault(t.Interval, globalDefault, "tasks.telnyx.interval")
 }
 
 // GetNotificationCooldown parses the cooldown string into a time.Duration.
 // Returns 6 hours if the value is empty or invalid.
 // This prevents repeatedly sending "low balance" alerts every check interval.
 func (t TelnyxConfig) GetNotificationCooldown() time.Duration {
-	if t.NotificationCooldown == "" {
-		return 6 * time.Hour
-	}
-	d, err := time.ParseDuration(t.NotificationCooldown)
-	if err != nil {
-		return 6 * time.Hour
-	}
-	return d
+	return parseDurationWithDefault(t.NotificationCooldown, 6*time.Hour, "tasks.telnyx.notification_cooldown")
 }
 
 // NotifierConfig holds settings for the Apprise notification system.
@@ -194,9 +182,5 @@ type SchedulerConfig struct {
 // Returns 5 minutes if the value is empty or invalid.
 // This determines how frequently all monitoring tasks are executed.
 func (s SchedulerConfig) GetInterval() time.Duration {
-	d, err := time.ParseDuration(s.Interval)
-	if err != nil {
-		return 5 * time.Minute
-	}
-	return d
+	return parseDurationWithDefault(s.Interval, 5*time.Minute, "scheduler.interval")
 }
