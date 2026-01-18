@@ -82,6 +82,15 @@ func runApp() {
 	interval := appConfig.Scheduler.GetInterval()
 	sched.ScheduleTask(task, interval)
 
+	// Register and schedule GitHub PR review check task if configured
+	if len(appConfig.GitHub.Repositories) > 0 {
+		fmt.Printf("Monitoring %d GitHub repositories for stale PRs (threshold: %d days)\n",
+			len(appConfig.GitHub.Repositories), appConfig.GitHub.GetStaleDays())
+
+		prTask := tasks.NewPRReviewCheckTask(appConfig.GitHub, notif)
+		sched.ScheduleTask(prTask, interval)
+	}
+
 	// Start the scheduler
 	fmt.Printf("Starting scheduler with interval %v...\n", interval)
 	sched.Start()

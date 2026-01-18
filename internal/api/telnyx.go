@@ -41,7 +41,9 @@ func (t *TelnyxAPI) GetBalance() (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch balance: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

@@ -45,7 +45,9 @@ func (w *WebhookNotifier) SendNotification(subject, message string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send webhook request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook request failed with status code: %d", resp.StatusCode)

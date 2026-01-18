@@ -9,6 +9,42 @@ type Config struct {
 	Telnyx    TelnyxConfig    `mapstructure:"telnyx"`
 	Notifier  NotifierConfig  `mapstructure:"notifier"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
+	GitHub    GitHubConfig    `mapstructure:"github"`
+}
+
+// GitHubConfig holds configuration for GitHub PR monitoring.
+type GitHubConfig struct {
+	Token                string             `mapstructure:"token"`
+	Repositories         []RepositoryConfig `mapstructure:"repositories"`
+	StaleDays            int                `mapstructure:"stale_days"`            // Default: 4
+	NotificationCooldown string             `mapstructure:"notification_cooldown"` // Default: 24h
+}
+
+// RepositoryConfig defines a specific repository to monitor.
+type RepositoryConfig struct {
+	Owner   string   `mapstructure:"owner"`
+	Repo    string   `mapstructure:"repo"`
+	Authors []string `mapstructure:"authors"`
+}
+
+// GetNotificationCooldown returns the configured cooldown duration or a default of 24 hours.
+func (g GitHubConfig) GetNotificationCooldown() time.Duration {
+	if g.NotificationCooldown == "" {
+		return 24 * time.Hour
+	}
+	d, err := time.ParseDuration(g.NotificationCooldown)
+	if err != nil {
+		return 24 * time.Hour
+	}
+	return d
+}
+
+// GetStaleDays returns the configured stale days threshold or a default of 4.
+func (g GitHubConfig) GetStaleDays() int {
+	if g.StaleDays == 0 {
+		return 4
+	}
+	return g.StaleDays
 }
 
 type TelnyxConfig struct {

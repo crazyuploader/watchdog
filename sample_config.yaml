@@ -10,3 +10,14 @@ notifier:
 
 scheduler:
   interval: "5m"
+
+github:
+  token: "ghp_xxxxxxxxxxxx" # Optional: GitHub Personal Access Token for higher rate limits
+  stale_days: 4
+  notification_cooldown: "24h"
+  repositories:
+    - owner: "owner_or_username"
+      repo: "repo_name"
+      authors:
+        - "author_name"
+
