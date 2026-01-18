@@ -138,8 +138,14 @@ func (t *PRReviewCheckTask) Run() error {
 	}
 
 	// Cleanup old entries from lastNotificationTime map to prevent memory leak
-	// Remove entries older than 7 days (PRs merged/closed will eventually be cleaned up)
-	cleanupThreshold := 7 * 24 * time.Hour
+	// Remove entries older than 7 days (or configured cooldown if longer)
+	// This ensures we respect the cooldown while eventually cleaning up closed/merged PRs
+	minCleanupAge := 7 * 24 * time.Hour
+	cooldown := t.config.GetNotificationCooldown()
+
+	// Use the larger of the two to avoid cleaning up before cooldown expires
+	cleanupThreshold := max(cooldown, minCleanupAge)
+
 	for prID, lastTime := range t.lastNotificationTime {
 		if time.Since(lastTime) > cleanupThreshold {
 			delete(t.lastNotificationTime, prID)

@@ -88,7 +88,7 @@ func (g GitHubConfig) GetNotificationCooldown() time.Duration {
 // Returns 4 days if not configured or set to 0.
 // A PR is stale if it hasn't been updated in this many days.
 func (g GitHubConfig) GetStaleDays() int {
-	if g.StaleDays == 0 {
+	if g.StaleDays <= 0 {
 		return 4
 	}
 	return g.StaleDays
