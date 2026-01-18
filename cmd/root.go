@@ -157,23 +157,26 @@ func runApp() {
 	// Apprise supports multiple notification services (Telegram, Discord, email, etc.)
 	notif := notifier.NewWebhookNotifier(appConfig.Notifier.AppriseAPIURL, appConfig.Notifier.GetServiceURLs())
 
-	// Register the Telnyx balance check task
+	// Register the Telnyx balance check task (if configured)
 	// This task periodically checks your Telnyx account balance and sends an alert
 	// if it falls below the configured threshold
 	telnyxCfg := appConfig.Tasks.Telnyx
-	task := tasks.NewTelnyxBalanceCheckTask(
-		telnyxCfg.APIURL,
-		telnyxCfg.APIKey,
-		telnyxCfg.Threshold,
-		telnyxCfg.GetNotificationCooldown(),
-		notif,
-	)
+	if telnyxCfg.APIURL != "" && telnyxCfg.APIKey != "" {
+		telnyxInterval := telnyxCfg.GetInterval(globalInterval)
+		fmt.Printf("Monitoring Telnyx balance at %s with threshold $%.2f (interval: %v)\n",
+			telnyxCfg.APIURL, telnyxCfg.Threshold, telnyxInterval)
 
-	// Schedule the task with per-task interval (falls back to global if not set)
-	telnyxInterval := telnyxCfg.GetInterval(globalInterval)
-	fmt.Printf("Monitoring Telnyx balance at %s with threshold $%.2f (interval: %v)\n",
-		telnyxCfg.APIURL, telnyxCfg.Threshold, telnyxInterval)
-	sched.ScheduleTask(task, telnyxInterval)
+		task := tasks.NewTelnyxBalanceCheckTask(
+			telnyxCfg.APIURL,
+			telnyxCfg.APIKey,
+			telnyxCfg.Threshold,
+			telnyxCfg.GetNotificationCooldown(),
+			notif,
+		)
+		sched.ScheduleTask(task, telnyxInterval)
+	} else {
+		fmt.Println("Telnyx monitoring disabled (api_url or api_key not configured)")
+	}
 
 	// Register and schedule GitHub PR review check task if repositories are configured
 	// This task monitors GitHub PRs and alerts when they've been pending review for too long
@@ -185,6 +188,17 @@ func runApp() {
 
 		prTask := tasks.NewPRReviewCheckTask(githubCfg, notif)
 		sched.ScheduleTask(prTask, githubInterval)
+	} else {
+		fmt.Println("GitHub monitoring disabled (no repositories configured)")
+	}
+
+	// Check if at least one task was scheduled
+	if !sched.HasTasks() {
+		fmt.Fprintln(os.Stderr, "\nError: No tasks configured!")
+		fmt.Fprintln(os.Stderr, "Please configure at least one of:")
+		fmt.Fprintln(os.Stderr, "  - Telnyx monitoring (tasks.telnyx.api_url and api_key)")
+		fmt.Fprintln(os.Stderr, "  - GitHub monitoring (tasks.github.repositories)")
+		os.Exit(1)
 	}
 
 	// Start the scheduler - this begins executing all registered tasks

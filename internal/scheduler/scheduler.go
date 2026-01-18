@@ -78,6 +78,12 @@ func (s *Scheduler) ScheduleTask(task Task, interval time.Duration) {
 	s.tasks = append(s.tasks, scheduledTask)
 }
 
+// HasTasks returns true if at least one task has been scheduled.
+// This is useful for checking if the scheduler has any work to do before starting it.
+func (s *Scheduler) HasTasks() bool {
+	return len(s.tasks) > 0
+}
+
 // Start begins executing all scheduled tasks.
 // Each task runs in its own goroutine and executes at its configured interval.
 //
