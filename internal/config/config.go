@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+// Config is the root configuration structure that holds all application settings.
+// It's populated from the YAML config file using Viper's mapstructure tags.
+// The config file should contain sections for telnyx, notifier, scheduler, and github.
 type Config struct {
 	Telnyx    TelnyxConfig    `mapstructure:"telnyx"`
 	Notifier  NotifierConfig  `mapstructure:"notifier"`
@@ -12,22 +15,43 @@ type Config struct {
 	GitHub    GitHubConfig    `mapstructure:"github"`
 }
 
-// GitHubConfig holds configuration for GitHub PR monitoring.
+// GitHubConfig holds all settings for GitHub pull request monitoring.
+// This feature monitors specified repositories for stale PRs (pending review for too long)
+// and sends notifications when PRs exceed the stale threshold.
 type GitHubConfig struct {
-	Token                string             `mapstructure:"token"`
-	Repositories         []RepositoryConfig `mapstructure:"repositories"`
-	StaleDays            int                `mapstructure:"stale_days"`            // Default: 4
-	NotificationCooldown string             `mapstructure:"notification_cooldown"` // Default: 24h
+	// Token is an optional GitHub personal access token for higher API rate limits.
+	// Without a token, you're limited to 60 requests/hour. With a token: 5000 requests/hour.
+	Token string `mapstructure:"token"`
+
+	// Repositories is the list of GitHub repos to monitor for stale PRs.
+	Repositories []RepositoryConfig `mapstructure:"repositories"`
+
+	// StaleDays defines how many days a PR can be pending before it's considered stale.
+	// Default is 4 days if not specified.
+	StaleDays int `mapstructure:"stale_days"`
+
+	// NotificationCooldown prevents spam by limiting how often we notify about the same PR.
+	// Format: "24h", "2h30m", etc. Default is 24 hours.
+	NotificationCooldown string `mapstructure:"notification_cooldown"`
 }
 
-// RepositoryConfig defines a specific repository to monitor.
+// RepositoryConfig defines a specific GitHub repository to monitor.
+// You can optionally filter PRs by author to only track specific team members.
 type RepositoryConfig struct {
-	Owner   string   `mapstructure:"owner"`
-	Repo    string   `mapstructure:"repo"`
+	// Owner is the GitHub username or organization name (e.g., "signoz")
+	Owner string `mapstructure:"owner"`
+
+	// Repo is the repository name (e.g., "signoz-web")
+	Repo string `mapstructure:"repo"`
+
+	// Authors is an optional list of GitHub usernames to filter PRs.
+	// If empty, all PRs in the repo are monitored. If specified, only PRs by these authors are checked.
 	Authors []string `mapstructure:"authors"`
 }
 
-// GetNotificationCooldown returns the configured cooldown duration or a default of 24 hours.
+// GetNotificationCooldown parses the cooldown string into a time.Duration.
+// Returns 24 hours if the value is empty or invalid.
+// This prevents sending duplicate notifications for the same PR too frequently.
 func (g GitHubConfig) GetNotificationCooldown() time.Duration {
 	if g.NotificationCooldown == "" {
 		return 24 * time.Hour
@@ -39,7 +63,9 @@ func (g GitHubConfig) GetNotificationCooldown() time.Duration {
 	return d
 }
 
-// GetStaleDays returns the configured stale days threshold or a default of 4.
+// GetStaleDays returns the number of days before a PR is considered stale.
+// Returns 4 days if not configured or set to 0.
+// A PR is stale if it hasn't been updated in this many days.
 func (g GitHubConfig) GetStaleDays() int {
 	if g.StaleDays == 0 {
 		return 4
@@ -47,29 +73,57 @@ func (g GitHubConfig) GetStaleDays() int {
 	return g.StaleDays
 }
 
+// TelnyxConfig holds settings for monitoring your Telnyx account balance.
+// The watchdog will periodically check your balance and alert if it drops below the threshold.
 type TelnyxConfig struct {
-	APIURL               string  `mapstructure:"api_url"`
-	APIKey               string  `mapstructure:"api_key"`
-	Threshold            float64 `mapstructure:"threshold"`
-	NotificationCooldown string  `mapstructure:"notification_cooldown"`
+	// APIURL is the Telnyx API endpoint for balance checks (usually https://api.telnyx.com/v2/balance)
+	APIURL string `mapstructure:"api_url"`
+
+	// APIKey is your Telnyx API key for authentication (starts with "KEY...")
+	APIKey string `mapstructure:"api_key"`
+
+	// Threshold is the minimum balance in dollars. Alerts are sent when balance < threshold.
+	Threshold float64 `mapstructure:"threshold"`
+
+	// NotificationCooldown prevents spam by limiting alert frequency for low balance.
+	// Format: "6h", "1h30m", etc. Default is 6 hours.
+	NotificationCooldown string `mapstructure:"notification_cooldown"`
 }
 
+// GetNotificationCooldown parses the cooldown string into a time.Duration.
+// Returns 6 hours if the value is empty or invalid.
+// This prevents repeatedly sending "low balance" alerts every check interval.
 func (t TelnyxConfig) GetNotificationCooldown() time.Duration {
 	if t.NotificationCooldown == "" {
-		return 6 * time.Hour // default
+		return 6 * time.Hour
 	}
 	d, err := time.ParseDuration(t.NotificationCooldown)
 	if err != nil {
-		return 6 * time.Hour // default
+		return 6 * time.Hour
 	}
 	return d
 }
 
+// NotifierConfig holds settings for the Apprise notification system.
+// Apprise is a universal notification library that supports 70+ services
+// (Telegram, Discord, Slack, email, SMS, etc.)
 type NotifierConfig struct {
-	AppriseAPIURL     string `mapstructure:"apprise_api_url"`
+	// AppriseAPIURL is the endpoint of your Apprise API server.
+	// This is where notification requests are sent.
+	AppriseAPIURL string `mapstructure:"apprise_api_url"`
+
+	// AppriseServiceURL contains one or more notification service URLs separated by commas.
+	// Examples:
+	//   - Telegram: "tgram://botToken/chatID"
+	//   - Discord: "discord://webhook_id/webhook_token"
+	//   - Email: "mailto://user:pass@gmail.com"
+	// Multiple services: "tgram://...,discord://...,mailto://..."
 	AppriseServiceURL string `mapstructure:"apprise_service_url"`
 }
 
+// GetServiceURLs splits the comma-separated service URL string into individual URLs.
+// Each URL represents a different notification destination (Telegram, Discord, etc.)
+// Returns an empty slice if no services are configured.
 func (n NotifierConfig) GetServiceURLs() []string {
 	if n.AppriseServiceURL == "" {
 		return []string{}
@@ -82,14 +136,22 @@ func (n NotifierConfig) GetServiceURLs() []string {
 	return urls
 }
 
+// SchedulerConfig controls how often the watchdog runs its monitoring tasks.
+// All tasks (Telnyx balance check, GitHub PR check) run at the same interval.
 type SchedulerConfig struct {
-	Interval string `mapstructure:"interval"` // parsed as duration
+	// Interval defines how often to run checks.
+	// Format: "5m" (5 minutes), "1h" (1 hour), "30s" (30 seconds), etc.
+	// Default is 5 minutes if not specified or invalid.
+	Interval string `mapstructure:"interval"`
 }
 
+// GetInterval parses the interval string into a time.Duration.
+// Returns 5 minutes if the value is empty or invalid.
+// This determines how frequently all monitoring tasks are executed.
 func (s SchedulerConfig) GetInterval() time.Duration {
 	d, err := time.ParseDuration(s.Interval)
 	if err != nil {
-		return 5 * time.Minute // default
+		return 5 * time.Minute
 	}
 	return d
 }
