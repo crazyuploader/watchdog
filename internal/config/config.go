@@ -18,6 +18,7 @@ type Config struct {
 // parseDurationWithDefault parses a duration string and returns a default if parsing fails.
 // Logs a warning when an invalid duration string is encountered to help with debugging.
 func parseDurationWithDefault(value string, defaultDuration time.Duration, configPath string) time.Duration {
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return defaultDuration
 	}
@@ -169,8 +170,8 @@ func (n NotifierConfig) GetServiceURLs() []string {
 	return urls
 }
 
-// SchedulerConfig controls how often the watchdog runs its monitoring tasks.
-// All tasks (Telnyx balance check, GitHub PR check) run at the same interval.
+// SchedulerConfig controls the default frequency for monitoring tasks.
+// Tasks can override this interval individually.
 type SchedulerConfig struct {
 	// Interval defines how often to run checks.
 	// Format: "5m" (5 minutes), "1h" (1 hour), "30s" (30 seconds), etc.
