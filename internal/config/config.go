@@ -7,18 +7,29 @@ import (
 
 // Config is the root configuration structure that holds all application settings.
 // It's populated from the YAML config file using Viper's mapstructure tags.
-// The config file should contain sections for telnyx, notifier, scheduler, and github.
+// The config file should contain sections for tasks, notifier, and scheduler.
 type Config struct {
-	Telnyx    TelnyxConfig    `mapstructure:"telnyx"`
+	Tasks     TasksConfig     `mapstructure:"tasks"`
 	Notifier  NotifierConfig  `mapstructure:"notifier"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
-	GitHub    GitHubConfig    `mapstructure:"github"`
+}
+
+// TasksConfig groups all task-specific configurations.
+// Each task can optionally override the global scheduler interval.
+type TasksConfig struct {
+	Telnyx TelnyxConfig `mapstructure:"telnyx"`
+	GitHub GitHubConfig `mapstructure:"github"`
 }
 
 // GitHubConfig holds all settings for GitHub pull request monitoring.
 // This feature monitors specified repositories for stale PRs (pending review for too long)
 // and sends notifications when PRs exceed the stale threshold.
 type GitHubConfig struct {
+	// Interval is an optional per-task override for the scheduler interval.
+	// If set, this task runs at this interval instead of the global scheduler interval.
+	// Format: "60m", "1h", etc. Leave empty to use the global default.
+	Interval string `mapstructure:"interval"`
+
 	// Token is an optional GitHub personal access token for higher API rate limits.
 	// Without a token, you're limited to 60 requests/hour. With a token: 5000 requests/hour.
 	Token string `mapstructure:"token"`
@@ -73,9 +84,27 @@ func (g GitHubConfig) GetStaleDays() int {
 	return g.StaleDays
 }
 
+// GetInterval returns the task-specific interval if configured, otherwise the global default.
+// This allows GitHub checks to run less frequently than other tasks (e.g., every 60m to respect rate limits).
+func (g GitHubConfig) GetInterval(globalDefault time.Duration) time.Duration {
+	if g.Interval == "" {
+		return globalDefault
+	}
+	d, err := time.ParseDuration(g.Interval)
+	if err != nil {
+		return globalDefault
+	}
+	return d
+}
+
 // TelnyxConfig holds settings for monitoring your Telnyx account balance.
 // The watchdog will periodically check your balance and alert if it drops below the threshold.
 type TelnyxConfig struct {
+	// Interval is an optional per-task override for the scheduler interval.
+	// If set, this task runs at this interval instead of the global scheduler interval.
+	// Format: "5m", "1h", etc. Leave empty to use the global default.
+	Interval string `mapstructure:"interval"`
+
 	// APIURL is the Telnyx API endpoint for balance checks (usually https://api.telnyx.com/v2/balance)
 	APIURL string `mapstructure:"api_url"`
 
@@ -88,6 +117,18 @@ type TelnyxConfig struct {
 	// NotificationCooldown prevents spam by limiting alert frequency for low balance.
 	// Format: "6h", "1h30m", etc. Default is 6 hours.
 	NotificationCooldown string `mapstructure:"notification_cooldown"`
+}
+
+// GetInterval returns the task-specific interval if configured, otherwise the global default.
+func (t TelnyxConfig) GetInterval(globalDefault time.Duration) time.Duration {
+	if t.Interval == "" {
+		return globalDefault
+	}
+	d, err := time.ParseDuration(t.Interval)
+	if err != nil {
+		return globalDefault
+	}
+	return d
 }
 
 // GetNotificationCooldown parses the cooldown string into a time.Duration.

@@ -96,7 +96,10 @@ func runApp() {
 	sched := scheduler.NewScheduler()
 
 	fmt.Printf("Loaded configuration using: %s\n", viper.ConfigFileUsed())
-	fmt.Printf("Monitoring %s with threshold $%.2f\n", appConfig.Telnyx.APIURL, appConfig.Telnyx.Threshold)
+
+	// Get global default interval from scheduler config
+	globalInterval := appConfig.Scheduler.GetInterval()
+	fmt.Printf("Global scheduler interval: %v\n", globalInterval)
 
 	// Initialize the notifier - this handles sending alerts via Apprise
 	// Apprise supports multiple notification services (Telegram, Discord, email, etc.)
@@ -105,30 +108,35 @@ func runApp() {
 	// Register the Telnyx balance check task
 	// This task periodically checks your Telnyx account balance and sends an alert
 	// if it falls below the configured threshold
+	telnyxCfg := appConfig.Tasks.Telnyx
 	task := tasks.NewTelnyxBalanceCheckTask(
-		appConfig.Telnyx.APIURL,
-		appConfig.Telnyx.APIKey,
-		appConfig.Telnyx.Threshold,
-		appConfig.Telnyx.GetNotificationCooldown(),
+		telnyxCfg.APIURL,
+		telnyxCfg.APIKey,
+		telnyxCfg.Threshold,
+		telnyxCfg.GetNotificationCooldown(),
 		notif,
 	)
 
-	// Schedule the task to run at the configured interval
-	interval := appConfig.Scheduler.GetInterval()
-	sched.ScheduleTask(task, interval)
+	// Schedule the task with per-task interval (falls back to global if not set)
+	telnyxInterval := telnyxCfg.GetInterval(globalInterval)
+	fmt.Printf("Monitoring Telnyx balance at %s with threshold $%.2f (interval: %v)\n",
+		telnyxCfg.APIURL, telnyxCfg.Threshold, telnyxInterval)
+	sched.ScheduleTask(task, telnyxInterval)
 
 	// Register and schedule GitHub PR review check task if repositories are configured
 	// This task monitors GitHub PRs and alerts when they've been pending review for too long
-	if len(appConfig.GitHub.Repositories) > 0 {
-		fmt.Printf("Monitoring %d GitHub repositories for stale PRs (threshold: %d days)\n",
-			len(appConfig.GitHub.Repositories), appConfig.GitHub.GetStaleDays())
+	githubCfg := appConfig.Tasks.GitHub
+	if len(githubCfg.Repositories) > 0 {
+		githubInterval := githubCfg.GetInterval(globalInterval)
+		fmt.Printf("Monitoring %d GitHub repositories for stale PRs (threshold: %d days, interval: %v)\n",
+			len(githubCfg.Repositories), githubCfg.GetStaleDays(), githubInterval)
 
-		prTask := tasks.NewPRReviewCheckTask(appConfig.GitHub, notif)
-		sched.ScheduleTask(prTask, interval)
+		prTask := tasks.NewPRReviewCheckTask(githubCfg, notif)
+		sched.ScheduleTask(prTask, githubInterval)
 	}
 
 	// Start the scheduler - this begins executing all registered tasks
-	fmt.Printf("Starting scheduler with interval %v...\n", interval)
+	fmt.Println("Starting scheduler...")
 	sched.Start()
 
 	// Keep the program running indefinitely
