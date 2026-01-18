@@ -137,6 +137,15 @@ func (t *PRReviewCheckTask) Run() error {
 		}
 	}
 
+	// Cleanup old entries from lastNotificationTime map to prevent memory leak
+	// Remove entries older than 7 days (PRs merged/closed will eventually be cleaned up)
+	cleanupThreshold := 7 * 24 * time.Hour
+	for prID, lastTime := range t.lastNotificationTime {
+		if time.Since(lastTime) > cleanupThreshold {
+			delete(t.lastNotificationTime, prID)
+		}
+	}
+
 	// Always return nil - we don't want task errors to stop the scheduler
 	return nil
 }
