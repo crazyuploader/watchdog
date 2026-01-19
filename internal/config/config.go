@@ -16,7 +16,8 @@ type Config struct {
 }
 
 // parseDurationWithDefault parses a duration string and returns a default if parsing fails.
-// Logs a warning when an invalid duration string is encountered to help with debugging.
+// parseDurationWithDefault parses value as a time.Duration and returns defaultDuration when value is empty or invalid.
+// When parsing fails it logs a warning that includes configPath and the invalid value before returning defaultDuration.
 func parseDurationWithDefault(value string, defaultDuration time.Duration, configPath string) time.Duration {
 	value = strings.TrimSpace(value)
 	if value == "" {

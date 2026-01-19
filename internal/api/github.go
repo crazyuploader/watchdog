@@ -60,7 +60,8 @@ type GitHubAPI struct {
 
 // NewGitHubAPI creates a new GitHub API client.
 // The token parameter is optional - pass an empty string if you don't have one.
-// Using a token is recommended to avoid rate limiting issues.
+// NewGitHubAPI creates a GitHubAPI client with BaseURL set to "https://api.github.com" and the provided personal access token.
+// If token is empty the client will make unauthenticated requests.
 func NewGitHubAPI(token string) *GitHubAPI {
 	return &GitHubAPI{
 		BaseURL: "https://api.github.com",
