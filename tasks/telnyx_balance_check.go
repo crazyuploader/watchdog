@@ -30,7 +30,7 @@ type TelnyxBalanceCheckTask struct {
 	lastNotificationTime time.Time
 
 	// apiClient is used to fetch balance data from Telnyx
-	apiClient *api.TelnyxAPI
+	apiClient api.TelnyxClient
 
 	// notifier is used to send alerts (via Apprise/Telegram/Discord/etc.)
 	notifier notifier.Notifier
@@ -52,7 +52,7 @@ type TelnyxBalanceCheckTask struct {
 //	    10.0,
 //	    6*time.Hour,
 //	    myNotifier,
-// apiURL and apiKey specify the Telnyx API endpoint and credentials. threshold is the minimum acceptable balance in dollars that triggers an alert. cooldown is the duration to wait between notifications to avoid alert spam. notifier is used to deliver alert messages.
+//	)
 func NewTelnyxBalanceCheckTask(apiURL, apiKey string, threshold float64, cooldown time.Duration, notifier notifier.Notifier) *TelnyxBalanceCheckTask {
 	return &TelnyxBalanceCheckTask{
 		threshold:            threshold,

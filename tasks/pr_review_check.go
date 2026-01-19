@@ -24,7 +24,7 @@ type PRReviewCheckTask struct {
 	config config.GitHubConfig
 
 	// apiClient is used to fetch PR data from GitHub
-	apiClient *api.GitHubAPI
+	apiClient api.GitHubClient
 
 	// notifier is used to send alerts (via Apprise/Telegram/Discord/etc.)
 	notifier notifier.Notifier
@@ -40,11 +40,7 @@ type PRReviewCheckTask struct {
 //   - cfg: GitHub configuration (repos to monitor, stale threshold, etc.)
 //   - notifier: Where to send notifications (Apprise webhook, Telegram, etc.)
 //
-// NewPRReviewCheckTask creates and returns a PRReviewCheckTask initialized with the
-// provided GitHub configuration and notifier.
-//
-// The GitHub API client is constructed using cfg.Token for authentication. The
-// returned task has an empty notification timestamp map used to track per-PR cooldowns.
+// The task will use the GitHub token from cfg for API authentication (if provided).
 func NewPRReviewCheckTask(cfg config.GitHubConfig, notifier notifier.Notifier) *PRReviewCheckTask {
 	return &PRReviewCheckTask{
 		config:               cfg,
