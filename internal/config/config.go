@@ -161,7 +161,7 @@ func (n NotifierConfig) GetServiceURLs() []string {
 		return []string{}
 	}
 	parts := strings.Split(n.AppriseServiceURL, ",")
-	var urls []string
+	urls := make([]string, 0)
 	for _, p := range parts {
 		trimmed := strings.TrimSpace(p)
 		if trimmed != "" {

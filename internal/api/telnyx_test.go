@@ -70,7 +70,7 @@ func TestTelnyxAPI_GetBalance_Success(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(resp)
+				_ = json.NewEncoder(w).Encode(resp)
 			}))
 			defer server.Close()
 
@@ -123,7 +123,7 @@ func TestTelnyxAPI_GetBalance_NonOKStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.body))
+				_, _ = w.Write([]byte(tt.body))
 			}))
 			defer server.Close()
 
@@ -144,7 +144,7 @@ func TestTelnyxAPI_GetBalance_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`invalid json response`))
+		_, _ = w.Write([]byte(`invalid json response`))
 	}))
 	defer server.Close()
 
@@ -191,7 +191,7 @@ func TestTelnyxAPI_GetBalance_InvalidBalanceString(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(resp)
+				_ = json.NewEncoder(w).Encode(resp)
 			}))
 			defer server.Close()
 
@@ -233,7 +233,7 @@ func TestTelnyxAPI_GetBalance_NegativeBalance(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 

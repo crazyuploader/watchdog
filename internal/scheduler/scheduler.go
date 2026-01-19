@@ -53,7 +53,9 @@ type scheduledTask struct {
 //
 // NewScheduler creates a new Scheduler initialized with no scheduled tasks.
 func NewScheduler() *Scheduler {
-	return &Scheduler{}
+	return &Scheduler{
+		tasks: make([]*scheduledTask, 0),
+	}
 }
 
 // ScheduleTask adds a task to the scheduler with the specified execution interval.

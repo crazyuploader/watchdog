@@ -77,7 +77,7 @@ func TestGitHubAPI_GetOpenPullRequests_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(prs)
+		_ = json.NewEncoder(w).Encode(prs)
 	}))
 	defer server.Close()
 
@@ -109,7 +109,7 @@ func TestGitHubAPI_GetOpenPullRequests_WithToken(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]PullRequest{})
+		_ = json.NewEncoder(w).Encode([]PullRequest{})
 	}))
 	defer server.Close()
 
@@ -126,7 +126,7 @@ func TestGitHubAPI_GetOpenPullRequests_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]PullRequest{})
+		_ = json.NewEncoder(w).Encode([]PullRequest{})
 	}))
 	defer server.Close()
 
@@ -173,7 +173,7 @@ func TestGitHubAPI_GetOpenPullRequests_NonOKStatus(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.body))
+				_, _ = w.Write([]byte(tt.body))
 			}))
 			defer server.Close()
 
@@ -194,7 +194,7 @@ func TestGitHubAPI_GetOpenPullRequests_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`invalid json`))
+		_, _ = w.Write([]byte(`invalid json`))
 	}))
 	defer server.Close()
 

@@ -506,10 +506,11 @@ func TestPRReviewCheckTask_Run_ExactlyAtStaleThreshold(t *testing.T) {
 
 	// PR updated exactly 4 days ago
 	pr := api.PullRequest{
-		Number:    123,
-		Title:     "PR at threshold",
-		User:      api.User{Login: "testuser"},
-		UpdatedAt: time.Now().Add(-4 * 24 * time.Hour),
+		Number: 123,
+		Title:  "PR at threshold",
+		User:   api.User{Login: "testuser"},
+		// Use 1 hour buffer to ensure it's definitely less than 4 days
+		UpdatedAt: time.Now().Add(-4 * 24 * time.Hour).Add(1 * time.Hour),
 		Draft:     false,
 	}
 

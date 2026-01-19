@@ -62,7 +62,7 @@ func TestWebhookNotifier_SendNotification_MultipleTargets(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedPayload)
+		_ = json.Unmarshal(body, &receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -127,7 +127,7 @@ func TestWebhookNotifier_SendNotification_EmptyTargets(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedPayload)
+		_ = json.Unmarshal(body, &receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -143,7 +143,7 @@ func TestWebhookNotifier_SendNotification_SpecialCharacters(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedPayload)
+		_ = json.Unmarshal(body, &receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -164,7 +164,7 @@ func TestWebhookNotifier_SendNotification_LongMessage(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedPayload)
+		_ = json.Unmarshal(body, &receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -187,7 +187,7 @@ func TestWebhookNotifier_SendNotification_EmptySubject(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedPayload)
+		_ = json.Unmarshal(body, &receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -204,7 +204,7 @@ func TestWebhookNotifier_SendNotification_EmptyMessage(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedPayload)
+		_ = json.Unmarshal(body, &receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -246,7 +246,7 @@ func TestWebhookNotifier_SendNotification_ServerClosesConnection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Close connection without sending response
 		conn, _, _ := w.(http.Hijacker).Hijack()
-		conn.Close()
+		_ = conn.Close()
 	}))
 	defer server.Close()
 
