@@ -35,6 +35,10 @@ type PullRequest struct {
 	// HTMLURL is the web URL to view the PR (e.g., https://github.com/owner/repo/pull/123)
 	// We include this in notifications so users can click through
 	HTMLURL string `json:"html_url"`
+
+	// RequestedReviewers is a list of users who have been asked to review this PR.
+	// We use this to enrich notifications (e.g., "Waiting on: alice, bob")
+	RequestedReviewers []User `json:"requested_reviewers"`
 }
 
 // User represents the GitHub user who created a pull request.

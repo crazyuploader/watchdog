@@ -135,8 +135,22 @@ func (t *PRReviewCheckTask) Run() error {
 
 			// PR is stale and we haven't notified recently - send notification
 			subject := fmt.Sprintf("Stale PR: %s", pr.Title)
-			message := fmt.Sprintf("PR #%d in %s/%s by %s is pending review.\nLast updated: %s\nLink: %s",
+
+			// Build message with reviewer info
+			var reviewerMsg string
+			if len(pr.RequestedReviewers) > 0 {
+				var names []string
+				for _, reviewer := range pr.RequestedReviewers {
+					names = append(names, reviewer.Login)
+				}
+				reviewerMsg = fmt.Sprintf("\nWaiting on: %s", strings.Join(names, ", "))
+			} else {
+				reviewerMsg = "\nNo specific reviewers requested (possibly approved or new)"
+			}
+
+			message := fmt.Sprintf("PR #%d in %s/%s by %s is pending review.%s\nLast updated: %s\nLink: %s",
 				pr.Number, repoConfig.Owner, repoConfig.Repo, pr.User.Login,
+				reviewerMsg,
 				pr.UpdatedAt.Format(time.RFC1123), pr.HTMLURL)
 
 			log.Info().Str("pr", prID).Msg("Sending notification for stale PR")

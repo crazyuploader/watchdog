@@ -116,6 +116,77 @@ func TestPRReviewCheckTask_Run_StalePR_SendsNotification(t *testing.T) {
 	mockNotifier.AssertExpectations(t)
 }
 
+func TestPRReviewCheckTask_Run_StalePR_WithRequestedReviewers(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays: 4,
+		Repositories: []config.RepositoryConfig{
+			{Owner: "testowner", Repo: "testrepo"},
+		},
+	}
+
+	stalePR := api.PullRequest{
+		Number:    123,
+		Title:     "Stale PR",
+		User:      api.User{Login: "testuser"},
+		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
+		RequestedReviewers: []api.User{
+			{Login: "alice"},
+			{Login: "bob"},
+		},
+		Draft:   false,
+		HTMLURL: "http://github.com/pr/123",
+	}
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+
+	mockNotifier := &MockNotifier{}
+	mockNotifier.On("SendNotification", "Stale PR: Stale PR", mock.MatchedBy(func(msg string) bool {
+		return assert.Contains(t, msg, "Waiting on: alice, bob")
+	})).Return(nil)
+
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	err := task.Run()
+	assert.NoError(t, err)
+	mockNotifier.AssertExpectations(t)
+}
+
+func TestPRReviewCheckTask_Run_StalePR_NoRequestedReviewers(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays: 4,
+		Repositories: []config.RepositoryConfig{
+			{Owner: "testowner", Repo: "testrepo"},
+		},
+	}
+
+	stalePR := api.PullRequest{
+		Number:             123,
+		Title:              "Stale PR",
+		User:               api.User{Login: "testuser"},
+		UpdatedAt:          time.Now().Add(-5 * 24 * time.Hour),
+		RequestedReviewers: []api.User{},
+		Draft:              false,
+		HTMLURL:            "http://github.com/pr/123",
+	}
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+
+	mockNotifier := &MockNotifier{}
+	mockNotifier.On("SendNotification", "Stale PR: Stale PR", mock.MatchedBy(func(msg string) bool {
+		return assert.Contains(t, msg, "No specific reviewers requested")
+	})).Return(nil)
+
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	err := task.Run()
+	assert.NoError(t, err)
+	mockNotifier.AssertExpectations(t)
+}
+
 func TestPRReviewCheckTask_Run_FreshPR_NoNotification(t *testing.T) {
 	cfg := config.GitHubConfig{
 		StaleDays: 4,
