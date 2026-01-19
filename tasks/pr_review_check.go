@@ -3,6 +3,7 @@ package tasks
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 	"watchdog/internal/api"
 	"watchdog/internal/config"
@@ -33,6 +34,9 @@ type PRReviewCheckTask struct {
 	// Key format: "owner/repo#123" (e.g., "signoz/signoz-web#456")
 	// This prevents spamming notifications for the same PR
 	lastNotificationTime map[string]time.Time
+
+	// mu guards access to lastNotificationTime to prevent data races
+	mu sync.Mutex
 }
 
 // NewPRReviewCheckTask creates a new PR monitoring task.
@@ -112,7 +116,12 @@ func (t *PRReviewCheckTask) Run() error {
 			// We don't want to spam notifications for the same PR every 5 minutes
 			// The cooldown (default 24h) ensures we only notify once per day per PR
 			prID := fmt.Sprintf("%s/%s#%d", repoConfig.Owner, repoConfig.Repo, pr.Number)
-			if lastTime, ok := t.lastNotificationTime[prID]; ok {
+
+			t.mu.Lock()
+			lastTime, ok := t.lastNotificationTime[prID]
+			t.mu.Unlock()
+
+			if ok {
 				if time.Since(lastTime) < t.config.GetNotificationCooldown() {
 					continue // We notified about this PR recently, skip it
 				}
@@ -132,7 +141,9 @@ func (t *PRReviewCheckTask) Run() error {
 			} else {
 				// Record that we sent a notification for this PR
 				// This starts the cooldown period
+				t.mu.Lock()
 				t.lastNotificationTime[prID] = time.Now()
+				t.mu.Unlock()
 			}
 		}
 	}
@@ -144,13 +155,18 @@ func (t *PRReviewCheckTask) Run() error {
 	cooldown := t.config.GetNotificationCooldown()
 
 	// Use the larger of the two to avoid cleaning up before cooldown expires
-	cleanupThreshold := max(cooldown, minCleanupAge)
+	cleanupThreshold := minCleanupAge
+	if cooldown > minCleanupAge {
+		cleanupThreshold = cooldown
+	}
 
+	t.mu.Lock()
 	for prID, lastTime := range t.lastNotificationTime {
 		if time.Since(lastTime) > cleanupThreshold {
 			delete(t.lastNotificationTime, prID)
 		}
 	}
+	t.mu.Unlock()
 
 	// Always return nil - we don't want task errors to stop the scheduler
 	return nil

@@ -77,7 +77,9 @@ func TestGitHubAPI_GetOpenPullRequests_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(prs)
+		if err := json.NewEncoder(w).Encode(prs); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -109,7 +111,9 @@ func TestGitHubAPI_GetOpenPullRequests_WithToken(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode([]PullRequest{})
+		if err := json.NewEncoder(w).Encode([]PullRequest{}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -126,7 +130,9 @@ func TestGitHubAPI_GetOpenPullRequests_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode([]PullRequest{})
+		if err := json.NewEncoder(w).Encode([]PullRequest{}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -173,7 +179,9 @@ func TestGitHubAPI_GetOpenPullRequests_NonOKStatus(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
-				_, _ = w.Write([]byte(tt.body))
+				if _, err := w.Write([]byte(tt.body)); err != nil {
+					t.Errorf("failed to write response: %v", err)
+				}
 			}))
 			defer server.Close()
 
@@ -194,7 +202,9 @@ func TestGitHubAPI_GetOpenPullRequests_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`invalid json`))
+		if _, err := w.Write([]byte(`invalid json`)); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

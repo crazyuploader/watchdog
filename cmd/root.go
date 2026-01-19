@@ -120,9 +120,8 @@ func validateConfig(cfg *config.Config) error {
 	}
 
 	// Validate scheduler configuration
-	if cfg.Scheduler.Interval == "" {
-		return fmt.Errorf("scheduler.interval is required but not set")
-	}
+	// Note: Config.Scheduler.Interval is allowed to be empty;
+	// SchedulerConfig.GetInterval() will provide a default (5m) in that case.
 
 	// Validate Telnyx configuration if API URL is set
 	if cfg.Tasks.Telnyx.APIURL != "" {

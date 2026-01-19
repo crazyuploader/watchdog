@@ -154,12 +154,21 @@ go test ./... -v
 ```
 
 ## Quality Metrics
-- ✅ **Comprehensive Coverage**: All public functions and methods tested
+- ✅ **High Coverage**: Core packages achieve 88-100% statement coverage
 - ✅ **Edge Cases**: Boundary conditions, empty inputs, invalid data
 - ✅ **Error Paths**: All error branches verified
 - ✅ **Maintainability**: Clear test names, well-documented test cases
 - ✅ **Fast Execution**: Tests use mocks, no real network calls
 - ✅ **Deterministic**: No flaky tests, consistent results
+
+### Coverage by Package
+| Package | Coverage |
+|---------|----------|
+| `internal/config` | 100.0% |
+| `internal/scheduler` | 100.0% |
+| `tasks` | ~99.0% |
+| `internal/api` | ~96.0% |
+| `internal/notifier` | 88.2% |
 
 ## Dependencies Added
 - `github.com/stretchr/testify` v1.11.1 - Assertion and mocking library

@@ -60,7 +60,7 @@ func TestParseDurationWithDefault(t *testing.T) {
 			name:            "negative duration",
 			value:           "-5m",
 			defaultDuration: 5 * time.Minute,
-			expected:        -5 * time.Minute,
+			expected:        5 * time.Minute,
 		},
 	}
 

@@ -57,18 +57,15 @@ type WebhookNotifier struct {
 
 // NewWebhookNotifier creates a new webhook-based notifier.
 // Parameters:
-//   - webhookURL: The Apprise API endpoint URL
+//   - webhookURL: The Apprise API endpoint URL (e.g., "https://apprise.example.com/notify")
 //   - targetURLs: List of Apprise service URLs (Telegram, Discord, etc.)
 //
 // Example:
 //
 //	notifier := NewWebhookNotifier(
 //	    "https://apprise.example.com/notify",
-//	    []string{"tgram://botToken/chatID", "discord://webhook_id/token"}
-//
-// NewWebhookNotifier creates a WebhookNotifier configured to send notifications to an Apprise webhook.
-// The webhookURL is the Apprise API endpoint (for example, "https://apprise.example.com/notify") and
-// targetURLs are the Apprise service URLs (e.g., Telegram, Discord, email) that will receive notifications.
+//	    []string{"tgram://botToken/chatID", "discord://webhook_id/token"},
+//	)
 func NewWebhookNotifier(webhookURL string, targetURLs []string) *WebhookNotifier {
 	return &WebhookNotifier{
 		WebhookURL: webhookURL,

@@ -246,7 +246,7 @@ func TestScheduledTask_StopChannel(t *testing.T) {
 	st := &scheduledTask{
 		task:     task,
 		interval: 1 * time.Second,
-		stop:     make(chan bool),
+		stop:     make(chan struct{}),
 	}
 
 	assert.NotNil(t, st.stop)

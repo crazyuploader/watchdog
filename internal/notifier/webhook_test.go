@@ -62,7 +62,9 @@ func TestWebhookNotifier_SendNotification_MultipleTargets(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &receivedPayload)
+		if err := json.Unmarshal(body, &receivedPayload); err != nil {
+			t.Errorf("failed to unmarshal request body: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -127,7 +129,9 @@ func TestWebhookNotifier_SendNotification_EmptyTargets(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &receivedPayload)
+		if err := json.Unmarshal(body, &receivedPayload); err != nil {
+			t.Errorf("failed to unmarshal request body: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -143,7 +147,9 @@ func TestWebhookNotifier_SendNotification_SpecialCharacters(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &receivedPayload)
+		if err := json.Unmarshal(body, &receivedPayload); err != nil {
+			t.Errorf("failed to unmarshal request body: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -164,7 +170,9 @@ func TestWebhookNotifier_SendNotification_LongMessage(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &receivedPayload)
+		if err := json.Unmarshal(body, &receivedPayload); err != nil {
+			t.Errorf("failed to unmarshal request body: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -187,7 +195,9 @@ func TestWebhookNotifier_SendNotification_EmptySubject(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &receivedPayload)
+		if err := json.Unmarshal(body, &receivedPayload); err != nil {
+			t.Errorf("failed to unmarshal request body: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -204,7 +214,9 @@ func TestWebhookNotifier_SendNotification_EmptyMessage(t *testing.T) {
 	var receivedPayload WebhookPayload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &receivedPayload)
+		if err := json.Unmarshal(body, &receivedPayload); err != nil {
+			t.Errorf("failed to unmarshal request body: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()

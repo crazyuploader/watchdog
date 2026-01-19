@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -39,8 +40,11 @@ type scheduledTask struct {
 	interval time.Duration
 
 	// stop is a channel used to signal the task goroutine to stop
-	// Sending true on this channel will terminate the task's execution loop
-	stop chan bool
+	// Closing this channel will terminate the task's execution loop
+	stop chan struct{}
+
+	// stopOnce guards the closing of the stop channel
+	stopOnce sync.Once
 }
 
 // NewScheduler creates a new empty scheduler.
@@ -76,7 +80,7 @@ func (s *Scheduler) ScheduleTask(task Task, interval time.Duration) {
 	scheduledTask := &scheduledTask{
 		task:     task,
 		interval: interval,
-		stop:     make(chan bool),
+		stop:     make(chan struct{}),
 	}
 	s.tasks = append(s.tasks, scheduledTask)
 }
@@ -132,17 +136,15 @@ func (s *Scheduler) Start() {
 }
 
 // Stop halts all running tasks.
-// It sends a stop signal to each task's goroutine, causing them to exit.
+// It closes the stop channel for each task's goroutine, causing them to exit.
 //
 // This is a graceful shutdown - it doesn't forcefully kill goroutines,
 // but rather signals them to stop. If a task is currently executing,
 // it will finish its current run before stopping.
-//
-// Note: In the current watchdog implementation, this method is never called
-// because the main program runs indefinitely (select{} blocks forever).
-// It's included for completeness and potential future use.
 func (s *Scheduler) Stop() {
 	for _, scheduledTask := range s.tasks {
-		scheduledTask.stop <- true
+		scheduledTask.stopOnce.Do(func() {
+			close(scheduledTask.stop)
+		})
 	}
 }

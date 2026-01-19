@@ -24,7 +24,7 @@ func parseDurationWithDefault(value string, defaultDuration time.Duration, confi
 		return defaultDuration
 	}
 	d, err := time.ParseDuration(value)
-	if err != nil {
+	if err != nil || d <= 0 {
 		log.Printf("Warning: Invalid duration '%s' for %s, using default %v (hint: use format like '5m', '1h', '24h')\n",
 			value, configPath, defaultDuration)
 		return defaultDuration

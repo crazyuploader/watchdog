@@ -41,15 +41,15 @@ This project now has **124 comprehensive unit tests** across **7 test files**, p
 
 ### Package Breakdown
 
-| Package | Test File | Tests | Coverage Focus |
-|---------|-----------|-------|----------------|
-| `internal/api` | `github_test.go` | 16 | GitHub API client, PR fetching |
-| `internal/api` | `telnyx_test.go` | 16 | Telnyx API client, balance checking |
-| `internal/config` | `config_test.go` | 10 | Configuration parsing, validation |
-| `internal/scheduler` | `scheduler_test.go` | 15 | Task scheduling, execution |
-| `internal/notifier` | `webhook_test.go` | 15 | Webhook notifications via Apprise |
-| `tasks` | `pr_review_check_test.go` | 29 | GitHub PR monitoring logic |
-| `tasks` | `telnyx_balance_check_test.go` | 23 | Telnyx balance monitoring logic |
+| Package | Test File | Tests | Coverage |
+|---------|-----------|-------|----------|
+| `internal/api` | `github_test.go` | 16 | 92.0% |
+| `internal/api` | `telnyx_test.go` | 16 | 92.0% |
+| `internal/config` | `config_test.go` | 10 | 100.0% |
+| `internal/scheduler` | `scheduler_test.go` | 15 | 100.0% |
+| `internal/notifier` | `webhook_test.go` | 15 | 88.2% |
+| `tasks` | `pr_review_check_test.go` | 29 | 97.8% |
+| `tasks` | `telnyx_balance_check_test.go` | 23 | 100.0% |
 
 ## Testing Philosophy
 
