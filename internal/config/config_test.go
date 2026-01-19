@@ -251,7 +251,7 @@ func TestTelnyxConfig_GetNotificationCooldown(t *testing.T) {
 
 func TestNotifierConfig_GetServiceURLs(t *testing.T) {
 	tests := []struct {
-		name      string
+		name       string
 		serviceURL string
 		expected   []string
 	}{

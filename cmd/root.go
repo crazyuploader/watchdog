@@ -65,6 +65,7 @@ func init() {
 // This function will terminate the application with a fatal error if:
 //   - The config file cannot be read
 //   - The config file cannot be unmarshaled
+//
 // initConfig reads configuration from the file specified by the --config flag (or config.yaml in the current directory) and environment variables, unmarshals it into the package-level appConfig, and validates required fields.
 // On read, unmarshal, or validation failure it writes an error message to stderr and exits the process with status 1.
 func initConfig() {
@@ -105,10 +106,10 @@ func initConfig() {
 // validateConfig checks that all required configuration fields are properly set.
 // validateConfig verifies required configuration fields for notifier, scheduler,
 // Telnyx, and GitHub.
- // It returns an error describing the first missing or invalid field, or nil if all checks pass.
- // Conditional checks:
-//  - Telnyx fields are validated only when Tasks.Telnyx.APIURL is set.
-//  - Each GitHub repository must include both Owner and Repo when any repositories are configured.
+// It returns an error describing the first missing or invalid field, or nil if all checks pass.
+// Conditional checks:
+//   - Telnyx fields are validated only when Tasks.Telnyx.APIURL is set.
+//   - Each GitHub repository must include both Owner and Repo when any repositories are configured.
 func validateConfig(cfg *config.Config) error {
 	// Validate notifier configuration
 	if cfg.Notifier.AppriseAPIURL == "" {

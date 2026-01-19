@@ -50,6 +50,7 @@ type scheduledTask struct {
 //
 //	sched := NewScheduler()
 //	sched.ScheduleTask(myTask, 5*time.Minute)
+//
 // NewScheduler creates a new Scheduler initialized with no scheduled tasks.
 func NewScheduler() *Scheduler {
 	return &Scheduler{}

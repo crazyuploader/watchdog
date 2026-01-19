@@ -309,20 +309,20 @@ func TestScheduler_RestartAfterStop(t *testing.T) {
 	task := &MockTask{}
 
 	sched.ScheduleTask(task, 50*time.Millisecond)
-	
+
 	// First run
 	sched.Start()
 	time.Sleep(100 * time.Millisecond)
 	sched.Stop()
-	
+
 	firstRunCount := task.GetRunCount()
 	assert.Greater(t, firstRunCount, 0)
-	
+
 	// Wait to ensure stopped
 	time.Sleep(100 * time.Millisecond)
 	countAfterStop := task.GetRunCount()
 	assert.Equal(t, firstRunCount, countAfterStop)
-	
+
 	// Note: Current implementation doesn't support restart
 	// This test documents the expected behavior
 }
