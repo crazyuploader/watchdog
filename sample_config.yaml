@@ -1,12 +1,41 @@
-telnyx:
-  api_url: "https://api.telnyx.com/v2/balance"
-  api_key: "YOUR_TELNYX_API_KEY"
-  threshold: 2.0
-  notification_cooldown: "6h"
+tasks:
+  telnyx:
+    api_url: "https://api.telnyx.com/v2/balance"
+    api_key: "YOUR_TELNYX_API_KEY"
+    threshold: 2.0
+    notification_cooldown: "6h"
+
+  github:
+    # Per-task interval override - GitHub checks run less frequently to respect API rate limits
+    interval: "60m"
+    token: "ghp_xxxxxxxxxxxx" # Optional: GitHub Personal Access Token for higher rate limits
+    stale_days: 4
+    notification_cooldown: "24h"
+    repositories:
+      # Example 1: Monitor a repo for PRs by specific authors
+      - owner: "owner1"
+        repo: "repo1"
+        authors:
+          - "author1"
+          - "author2"
+          - "author3"
+
+      # Example 2: Monitor another repo with different authors
+      - owner: "owner2"
+        repo: "repo2"
+        authors:
+          - "author4"
+          - "author5"
+
+      # Example 3: Monitor all PRs in a repo (no author filter)
+      - owner: "owner3"
+        repo: "repo3"
+        authors: [] # Empty list = monitor all PRs regardless of author
 
 notifier:
   apprise_api_url: "https://your-custom-endpoint.com/notify"
   apprise_service_url: "discord://webhook_id/webhook_token,mailto://user:pass@gmail.com"
 
 scheduler:
+  # Global default interval - tasks use this unless they have their own interval override
   interval: "5m"

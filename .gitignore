@@ -15,3 +15,6 @@ vendor/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Coverage
+cover.out
