@@ -176,8 +176,7 @@ func TestScheduler_Stop_MultipleTasks(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 	sched.Stop()
-	// Allow for graceful shutdown of goroutines
-	time.Sleep(50 * time.Millisecond)
+	// Stop() now waits for goroutines to exit, so no internal sleep needed
 
 	count1Before := task1.GetRunCount()
 	count2Before := task2.GetRunCount()

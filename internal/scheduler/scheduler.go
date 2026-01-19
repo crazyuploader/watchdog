@@ -28,6 +28,9 @@ type Scheduler struct {
 	// tasks is the list of all scheduled tasks
 	// Each task runs independently in its own goroutine
 	tasks []*scheduledTask
+
+	// wg waits for all task goroutines to complete
+	wg sync.WaitGroup
 }
 
 // scheduledTask is an internal struct that wraps a Task with its scheduling metadata.
@@ -108,9 +111,11 @@ func (s *Scheduler) HasTasks() bool {
 // the next execution will be delayed (tickers don't queue up).
 func (s *Scheduler) Start() {
 	for _, st := range s.tasks {
+		s.wg.Add(1)
 		// Launch each task in its own goroutine
 		// We pass 'st' as a parameter to avoid closure issues
 		go func(task *scheduledTask) {
+			defer s.wg.Done()
 			// Create a ticker that fires at the specified interval
 			ticker := time.NewTicker(task.interval)
 			defer ticker.Stop()
@@ -119,6 +124,14 @@ func (s *Scheduler) Start() {
 			for {
 				select {
 				case <-ticker.C:
+					// Check for stop signal before running task
+					// This ensures we prioritize stopping if both ticker and stop are ready
+					select {
+					case <-task.stop:
+						return
+					default:
+					}
+
 					// Ticker fired - time to run the task
 					err := task.task.Run()
 					if err != nil {
@@ -141,10 +154,14 @@ func (s *Scheduler) Start() {
 // This is a graceful shutdown - it doesn't forcefully kill goroutines,
 // but rather signals them to stop. If a task is currently executing,
 // it will finish its current run before stopping.
+//
+// Stop waits for all task goroutines to fully exit before returning.
 func (s *Scheduler) Stop() {
 	for _, scheduledTask := range s.tasks {
 		scheduledTask.stopOnce.Do(func() {
 			close(scheduledTask.stop)
 		})
 	}
+	// Wait for all goroutines to cleanup and exit
+	s.wg.Wait()
 }
