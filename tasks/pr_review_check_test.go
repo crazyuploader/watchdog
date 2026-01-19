@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 	"watchdog/internal/api"
@@ -23,6 +24,22 @@ func (m *MockGitHubClient) GetOpenPullRequests(owner, repo string) ([]api.PullRe
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]api.PullRequest), args.Error(1)
+}
+
+func (m *MockGitHubClient) GetCommitStatus(owner, repo, ref string) (*api.CommitStatus, error) {
+	args := m.Called(owner, repo, ref)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*api.CommitStatus), args.Error(1)
+}
+
+func (m *MockGitHubClient) GetCheckSuites(owner, repo, ref string) (*api.CheckSuitesResponse, error) {
+	args := m.Called(owner, repo, ref)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*api.CheckSuitesResponse), args.Error(1)
 }
 
 func TestNewPRReviewCheckTask(t *testing.T) {
@@ -94,16 +111,22 @@ func TestPRReviewCheckTask_Run_StalePR_SendsNotification(t *testing.T) {
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour), // 5 days old
 		Draft:     false,
 		HTMLURL:   "https://github.com/testowner/testrepo/pull/123",
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", "Stale PR: Stale PR", mock.MatchedBy(func(msg string) bool {
+		// Should NOT contain "Waiting on" or CI status (since passing)
 		return assert.Contains(t, msg, "#123") &&
 			assert.Contains(t, msg, "testowner/testrepo") &&
-			assert.Contains(t, msg, "testuser")
+			assert.Contains(t, msg, "testuser") &&
+			!strings.Contains(msg, "Waiting on:") &&
+			!strings.Contains(msg, "CI:")
 	})).Return(nil)
 
 	task := NewPRReviewCheckTask(cfg, mockNotifier)
@@ -135,14 +158,18 @@ func TestPRReviewCheckTask_Run_StalePR_WithRequestedReviewers(t *testing.T) {
 		},
 		Draft:   false,
 		HTMLURL: "http://github.com/pr/123",
+		Head:    api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", "Stale PR: Stale PR", mock.MatchedBy(func(msg string) bool {
-		return assert.Contains(t, msg, "Waiting on: alice, bob")
+		// Reviewer "Waiting on" list should be REMOVED
+		return !strings.Contains(msg, "Waiting on: alice, bob")
 	})).Return(nil)
 
 	task := NewPRReviewCheckTask(cfg, mockNotifier)
@@ -169,14 +196,18 @@ func TestPRReviewCheckTask_Run_StalePR_NoRequestedReviewers(t *testing.T) {
 		RequestedReviewers: []api.User{},
 		Draft:              false,
 		HTMLURL:            "http://github.com/pr/123",
+		Head:               api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", "Stale PR: Stale PR", mock.MatchedBy(func(msg string) bool {
-		return assert.Contains(t, msg, "No specific reviewers requested")
+		// "No specific reviewers" message should be REMOVED
+		return !strings.Contains(msg, "No specific reviewers requested")
 	})).Return(nil)
 
 	task := NewPRReviewCheckTask(cfg, mockNotifier)
@@ -205,6 +236,7 @@ func TestPRReviewCheckTask_Run_FreshPR_NoNotification(t *testing.T) {
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{freshPR}, nil)
+	// No status checks needed for fresh PRs
 
 	mockNotifier := &MockNotifier{}
 
@@ -232,10 +264,12 @@ func TestPRReviewCheckTask_Run_DraftPR_Skipped(t *testing.T) {
 		User:      api.User{Login: "testuser"},
 		UpdatedAt: time.Now().Add(-10 * 24 * time.Hour), // Very old
 		Draft:     true,
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{draftPR}, nil)
+	// No GetCommitStatus explanation needed because draft PRs are skipped before that check
 
 	mockNotifier := &MockNotifier{}
 
@@ -267,10 +301,13 @@ func TestPRReviewCheckTask_Run_AuthorFilter_Matches(t *testing.T) {
 		User:      api.User{Login: "author1"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
@@ -336,10 +373,13 @@ func TestPRReviewCheckTask_Run_AuthorFilter_CaseInsensitive(t *testing.T) {
 		User:      api.User{Login: "author1"}, // Different case
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
@@ -349,6 +389,114 @@ func TestPRReviewCheckTask_Run_AuthorFilter_CaseInsensitive(t *testing.T) {
 
 	err := task.Run()
 
+	assert.NoError(t, err)
+	mockNotifier.AssertExpectations(t)
+}
+
+func TestPRReviewCheckTask_Run_StalePR_CIFailure(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays: 4,
+		Repositories: []config.RepositoryConfig{
+			{Owner: "testowner", Repo: "testrepo"},
+		},
+	}
+
+	stalePR := api.PullRequest{
+		Number:    123,
+		Title:     "Failing PR",
+		User:      api.User{Login: "dev"},
+		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
+		Head:      api.PRHead{SHA: "badsha"},
+	}
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "badsha").Return(&api.CommitStatus{State: "failure"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "badsha").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
+
+	mockNotifier := &MockNotifier{}
+	mockNotifier.On("SendNotification", mock.Anything, mock.MatchedBy(func(msg string) bool {
+		return assert.Contains(t, msg, "CI: Failing ❌")
+	})).Return(nil)
+
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	err := task.Run()
+	assert.NoError(t, err)
+	mockNotifier.AssertExpectations(t)
+}
+
+func TestPRReviewCheckTask_Run_StalePR_CIPending(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays: 4,
+		Repositories: []config.RepositoryConfig{
+			{Owner: "testowner", Repo: "testrepo"},
+		},
+	}
+
+	stalePR := api.PullRequest{
+		Number:    123,
+		Title:     "Pending PR",
+		User:      api.User{Login: "dev"},
+		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
+		Head:      api.PRHead{SHA: "pendingsha"},
+	}
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "pendingsha").Return(&api.CommitStatus{State: "pending"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "pendingsha").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
+
+	mockNotifier := &MockNotifier{}
+	mockNotifier.On("SendNotification", mock.Anything, mock.MatchedBy(func(msg string) bool {
+		// Pending is no longer reported, should be clean
+		return !strings.Contains(msg, "CI: Pending")
+	})).Return(nil)
+
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	err := task.Run()
+	assert.NoError(t, err)
+	mockNotifier.AssertExpectations(t)
+}
+
+func TestPRReviewCheckTask_Run_StalePR_CheckSuiteFailure(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays: 4,
+		Repositories: []config.RepositoryConfig{
+			{Owner: "testowner", Repo: "testrepo"},
+		},
+	}
+
+	stalePR := api.PullRequest{
+		Number:    123,
+		Title:     "Actions Failing PR",
+		User:      api.User{Login: "dev"},
+		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
+		Head:      api.PRHead{SHA: "actionfail"},
+	}
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	// Commit status says success (e.g. legacy), but Check Action failed
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "actionfail").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "actionfail").Return(&api.CheckSuitesResponse{
+		CheckSuites: []api.CheckSuite{
+			{Conclusion: "failure", Status: "completed"},
+		},
+	}, nil)
+
+	mockNotifier := &MockNotifier{}
+	mockNotifier.On("SendNotification", mock.Anything, mock.MatchedBy(func(msg string) bool {
+		return assert.Contains(t, msg, "CI: Failing ❌")
+	})).Return(nil)
+
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	err := task.Run()
 	assert.NoError(t, err)
 	mockNotifier.AssertExpectations(t)
 }
@@ -371,10 +519,13 @@ func TestPRReviewCheckTask_Run_NoAuthorFilter_AllPRsMonitored(t *testing.T) {
 		User:      api.User{Login: "anyone"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
@@ -403,10 +554,19 @@ func TestPRReviewCheckTask_Run_RespectsCooldown(t *testing.T) {
 		User:      api.User{Login: "testuser"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR}, nil)
+	// Notification sent only on first run, so GetCommitStatus called only on first run?
+	// Logic: Fetch PR -> Check Stale -> Check Cooldown -> (If Notify) Check CI -> Notify
+	// If Cooldown blocks notification, we SKIP GetCommitStatus?
+	// Let's check logic:
+	// if time.Since(lastTime) < cooldown { continue }
+	// Result: CI status is checked ONLY when sending notification.
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil).Once()
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil).Once()
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", mock.Anything, mock.Anything).Return(nil).Once()
@@ -440,11 +600,14 @@ func TestPRReviewCheckTask_Run_APIError_ContinuesWithOtherRepos(t *testing.T) {
 		User:      api.User{Login: "testuser"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha456"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "owner1", "repo1").Return(nil, errors.New("API error"))
 	mockAPI.On("GetOpenPullRequests", "owner2", "repo2").Return([]api.PullRequest{stalePR}, nil)
+	mockAPI.On("GetCommitStatus", "owner2", "repo2", "sha456").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "owner2", "repo2", "sha456").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
@@ -474,6 +637,7 @@ func TestPRReviewCheckTask_Run_NotificationError_ContinuesWithOtherPRs(t *testin
 		User:      api.User{Login: "user1"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	stalePR2 := api.PullRequest{
@@ -482,10 +646,15 @@ func TestPRReviewCheckTask_Run_NotificationError_ContinuesWithOtherPRs(t *testin
 		User:      api.User{Login: "user2"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha456"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "testowner", "testrepo").Return([]api.PullRequest{stalePR1, stalePR2}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
+	mockAPI.On("GetCommitStatus", "testowner", "testrepo", "sha456").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "testowner", "testrepo", "sha456").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", "Stale PR: PR 1", mock.Anything).Return(errors.New("notification failed"))
@@ -516,6 +685,7 @@ func TestPRReviewCheckTask_Run_MultipleRepositories(t *testing.T) {
 		User:      api.User{Login: "user1"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha123"},
 	}
 
 	stalePR2 := api.PullRequest{
@@ -524,11 +694,16 @@ func TestPRReviewCheckTask_Run_MultipleRepositories(t *testing.T) {
 		User:      api.User{Login: "user2"},
 		UpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
 		Draft:     false,
+		Head:      api.PRHead{SHA: "sha456"},
 	}
 
 	mockAPI := &MockGitHubClient{}
 	mockAPI.On("GetOpenPullRequests", "owner1", "repo1").Return([]api.PullRequest{stalePR1}, nil)
 	mockAPI.On("GetOpenPullRequests", "owner2", "repo2").Return([]api.PullRequest{stalePR2}, nil)
+	mockAPI.On("GetCommitStatus", "owner1", "repo1", "sha123").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "owner1", "repo1", "sha123").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
+	mockAPI.On("GetCommitStatus", "owner2", "repo2", "sha456").Return(&api.CommitStatus{State: "success"}, nil)
+	mockAPI.On("GetCheckSuites", "owner2", "repo2", "sha456").Return(&api.CheckSuitesResponse{TotalCount: 0}, nil)
 
 	mockNotifier := &MockNotifier{}
 	mockNotifier.On("SendNotification", mock.Anything, mock.Anything).Return(nil).Times(2)

@@ -136,25 +136,54 @@ func (t *PRReviewCheckTask) Run() error {
 			// PR is stale and we haven't notified recently - send notification
 			subject := fmt.Sprintf("Stale PR: %s", pr.Title)
 
-			// Build message with reviewer info
-			var reviewerMsg string
-			if len(pr.RequestedReviewers) > 0 {
-				var names []string
-				for _, reviewer := range pr.RequestedReviewers {
-					names = append(names, reviewer.Login)
+			// Check CI status (Commit Status + Check Suites)
+			var ciMsg string
+
+			// 1. Get Commit Status (Legacy / CircleCI / Jenkins)
+			commitStatus, errStatus := t.apiClient.GetCommitStatus(repoConfig.Owner, repoConfig.Repo, pr.Head.SHA)
+			if errStatus != nil {
+				log.Error().Err(errStatus).Str("pr", prID).Msg("Failed to check commit status")
+			}
+
+			// 2. Get Check Suites (GitHub Actions)
+			checkSuites, errChecks := t.apiClient.GetCheckSuites(repoConfig.Owner, repoConfig.Repo, pr.Head.SHA)
+			if errChecks != nil {
+				log.Error().Err(errChecks).Str("pr", prID).Msg("Failed to check suites")
+			}
+
+			// 3. Combine Logic
+			// Priority: Failure only. We assume success/pending unless we find a failure.
+			isFailure := false
+
+			// Check Commit Status
+			if commitStatus != nil {
+				switch commitStatus.State {
+				case "failure", "error":
+					isFailure = true
 				}
-				reviewerMsg = fmt.Sprintf("\nWaiting on: %s", strings.Join(names, ", "))
-			} else {
-				reviewerMsg = "\nNo specific reviewers requested (possibly approved or new)"
+			}
+
+			// Check Suites
+			if checkSuites != nil {
+				for _, suite := range checkSuites.CheckSuites {
+					if suite.Conclusion == "failure" || suite.Conclusion == "timed_out" || suite.Conclusion == "cancelled" {
+						isFailure = true
+						break
+					}
+				}
+			}
+
+			if isFailure {
+				ciMsg = " (CI: Failing ❌)"
 			}
 
 			message := fmt.Sprintf("PR #%d in %s/%s by %s is pending review.%s\nLast updated: %s\nLink: %s",
 				pr.Number, repoConfig.Owner, repoConfig.Repo, pr.User.Login,
-				reviewerMsg,
+				ciMsg,
 				pr.UpdatedAt.Format(time.RFC1123), pr.HTMLURL)
 
 			log.Info().Str("pr", prID).Msg("Sending notification for stale PR")
-			err := t.notifier.SendNotification(subject, message)
+			err = t.notifier.SendNotification(subject, message)
 			if err != nil {
 				// Log the error but continue with other PRs
 				log.Error().Err(err).Str("pr", prID).Msg("Failed to send notification")

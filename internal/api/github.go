@@ -39,6 +39,39 @@ type PullRequest struct {
 	// RequestedReviewers is a list of users who have been asked to review this PR.
 	// We use this to enrich notifications (e.g., "Waiting on: alice, bob")
 	RequestedReviewers []User `json:"requested_reviewers"`
+
+	// Head represents the tip of the PR branch. We need the SHA to check CI status.
+	Head PRHead `json:"head"`
+}
+
+// PRHead represents the head of a pull request (the commit at the tip).
+type PRHead struct {
+	SHA string `json:"sha"`
+}
+
+// CommitStatus represents the combined status of a commit (CI results).
+type CommitStatus struct {
+	// State is the overall status: "pending", "success", "failure", or "error"
+	State string `json:"state"`
+}
+
+// CheckSuitesResponse represents the response from the Check Suites API.
+type CheckSuitesResponse struct {
+	TotalCount  int          `json:"total_count"`
+	CheckSuites []CheckSuite `json:"check_suites"`
+}
+
+// CheckSuite represents a group of checks run by a single GitHub App (like GitHub Actions).
+type CheckSuite struct {
+	ID         int64  `json:"id"`
+	Status     string `json:"status"`     // queued, in_progress, completed
+	Conclusion string `json:"conclusion"` // success, failure, neutral, cancelled, timed_out, action_required, stale
+	App        App    `json:"app"`
+}
+
+// App represents the GitHub App that started the check suite.
+type App struct {
+	Name string `json:"name"`
 }
 
 // User represents the GitHub user who created a pull request.
@@ -71,6 +104,88 @@ func NewGitHubAPI(token string) *GitHubAPI {
 		BaseURL: "https://api.github.com",
 		Token:   token,
 	}
+}
+
+// GetConfirmStatus fetches the combined status (CI) for a specific commit ref (SHA).
+// This is useful for checking if a PR build passed or failed.
+func (g *GitHubAPI) GetCommitStatus(owner, repo, ref string) (*CommitStatus, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/status", g.BaseURL, owner, repo, ref)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Add("Accept", "application/vnd.github.v3+json")
+	req.Header.Add("User-Agent", "watchdog-app")
+	if g.Token != "" {
+		req.Header.Add("Authorization", "token "+g.Token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch commit status: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("github api request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	var status CommitStatus
+	if err := json.Unmarshal(body, &status); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	return &status, nil
+}
+
+// GetCheckSuites fetches the check suites for a specific commit ref (SHA).
+// This is required to get the status of GitHub Actions, which are not always covered by GetCommitStatus.
+func (g *GitHubAPI) GetCheckSuites(owner, repo, ref string) (*CheckSuitesResponse, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/check-suites", g.BaseURL, owner, repo, ref)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Add("Accept", "application/vnd.github.v3+json")
+	req.Header.Add("User-Agent", "watchdog-app")
+	if g.Token != "" {
+		req.Header.Add("Authorization", "token "+g.Token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch check suites: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("github api request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	var suites CheckSuitesResponse
+	if err := json.Unmarshal(body, &suites); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	return &suites, nil
 }
 
 // GetOpenPullRequests fetches all open pull requests for a specific repository.
