@@ -1,5 +1,7 @@
 package notifier
 
+import "context"
+
 // Notifier defines the interface for sending notifications.
 // This abstraction allows us to support multiple notification backends
 // (webhook/Apprise, Telegram, email, etc.) with a consistent interface.
@@ -11,9 +13,10 @@ package notifier
 type Notifier interface {
 	// SendNotification sends a notification with the given subject and message.
 	// Parameters:
+	//   - ctx: Context for cancellation and deadline propagation
 	//   - subject: The notification title/subject (e.g., "Telnyx Balance Alert")
 	//   - message: The notification body/details (e.g., "Balance is $5.00, below threshold")
 	// Returns:
 	//   - An error if the notification fails to send, nil on success
-	SendNotification(subject, message string) error
+	SendNotification(ctx context.Context, subject, message string) error
 }

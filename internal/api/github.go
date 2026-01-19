@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 )
 
@@ -106,24 +108,27 @@ func NewGitHubAPI(token string) *GitHubAPI {
 	}
 }
 
-// GetConfirmStatus fetches the combined status (CI) for a specific commit ref (SHA).
-// This is useful for checking if a PR build passed or failed.
-func (g *GitHubAPI) GetCommitStatus(owner, repo, ref string) (*CommitStatus, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/status", g.BaseURL, owner, repo, ref)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-
+// setCommonHeaders adds common headers required for GitHub API requests.
+func (g *GitHubAPI) setCommonHeaders(req *http.Request) {
 	req.Header.Add("Accept", "application/vnd.github.v3+json")
 	req.Header.Add("User-Agent", "watchdog-app")
 	if g.Token != "" {
 		req.Header.Add("Authorization", "token "+g.Token)
 	}
+}
 
-	resp, err := client.Do(req)
+// GetCommitStatus fetches the combined status (CI) for a specific commit ref (SHA).
+// This is useful for checking if a PR build passed or failed.
+func (g *GitHubAPI) GetCommitStatus(ctx context.Context, owner, repo, ref string) (*CommitStatus, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/status", g.BaseURL, owner, repo, ref)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	g.setCommonHeaders(req)
+
+	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch commit status: %v", err)
 	}
@@ -149,22 +154,16 @@ func (g *GitHubAPI) GetCommitStatus(owner, repo, ref string) (*CommitStatus, err
 
 // GetCheckSuites fetches the check suites for a specific commit ref (SHA).
 // This is required to get the status of GitHub Actions, which are not always covered by GetCommitStatus.
-func (g *GitHubAPI) GetCheckSuites(owner, repo, ref string) (*CheckSuitesResponse, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
+func (g *GitHubAPI) GetCheckSuites(ctx context.Context, owner, repo, ref string) (*CheckSuitesResponse, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/check-suites", g.BaseURL, owner, repo, ref)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
+	g.setCommonHeaders(req)
 
-	req.Header.Add("Accept", "application/vnd.github.v3+json")
-	req.Header.Add("User-Agent", "watchdog-app")
-	if g.Token != "" {
-		req.Header.Add("Authorization", "token "+g.Token)
-	}
-
-	resp, err := client.Do(req)
+	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch check suites: %v", err)
 	}
@@ -188,10 +187,14 @@ func (g *GitHubAPI) GetCheckSuites(owner, repo, ref string) (*CheckSuitesRespons
 	return &suites, nil
 }
 
+// linkHeaderRegex parses the Link header to extract the next page URL.
+var linkHeaderRegex = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
+
 // GetOpenPullRequests fetches all open pull requests for a specific repository.
-// It returns up to 100 PRs (GitHub's max per_page limit).
+// It automatically handles pagination to fetch all PRs, not just the first page.
 //
 // Parameters:
+//   - ctx: Context for cancellation and deadline propagation
 //   - owner: The GitHub username or organization (e.g., "signoz")
 //   - repo: The repository name (e.g., "signoz-web")
 //
@@ -200,61 +203,71 @@ func (g *GitHubAPI) GetCheckSuites(owner, repo, ref string) (*CheckSuitesRespons
 //   - An error if the API request fails or returns a non-200 status
 //
 // The function automatically adds authentication headers if a token is configured.
-func (g *GitHubAPI) GetOpenPullRequests(owner, repo string) ([]PullRequest, error) {
-	// Create HTTP client with a 10-second timeout to prevent hanging
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+func (g *GitHubAPI) GetOpenPullRequests(ctx context.Context, owner, repo string) ([]PullRequest, error) {
+	var allPRs []PullRequest
 
-	// Build the API URL - we request open PRs with a limit of 100 per page
+	// Build the initial API URL - we request open PRs with a limit of 100 per page
 	url := fmt.Sprintf("%s/repos/%s/%s/pulls?state=open&per_page=100", g.BaseURL, owner, repo)
 
-	// Create the HTTP request
-	req, err := http.NewRequest("GET", url, nil)
+	// Paginate through all pages
+	for url != "" {
+		// Check context before making request
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		prs, nextURL, err := g.fetchPullRequestsPage(ctx, url)
+		if err != nil {
+			return nil, err
+		}
+
+		allPRs = append(allPRs, prs...)
+		url = nextURL
+	}
+
+	return allPRs, nil
+}
+
+// fetchPullRequestsPage fetches a single page of pull requests and returns the next page URL if available.
+func (g *GitHubAPI) fetchPullRequestsPage(ctx context.Context, url string) ([]PullRequest, string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return nil, "", fmt.Errorf("failed to create request: %v", err)
 	}
+	g.setCommonHeaders(req)
 
-	// Set required headers
-	req.Header.Add("Accept", "application/vnd.github.v3+json")
-	req.Header.Add("User-Agent", "watchdog-app") // GitHub requires a User-Agent header
-
-	// Add authentication if we have a token
-	// This increases rate limits from 60/hour to 5000/hour
-	if g.Token != "" {
-		req.Header.Add("Authorization", "token "+g.Token)
-	}
-
-	// Execute the request
-	resp, err := client.Do(req)
+	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch pull requests: %v", err)
+		return nil, "", fmt.Errorf("failed to fetch pull requests: %v", err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 
-	// Ensure the response body is closed when we're done
-	// We explicitly ignore the error since there's nothing we can do about it
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	// Check if the request was successful
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("github api request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, "", fmt.Errorf("github api request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
+		return nil, "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	// Parse the JSON response into our PullRequest struct
 	var prs []PullRequest
-	err = json.Unmarshal(body, &prs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	if err := json.Unmarshal(body, &prs); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
-	return prs, nil
+	// Parse Link header for pagination
+	nextURL := ""
+	linkHeader := resp.Header.Get("Link")
+	if linkHeader != "" {
+		matches := linkHeaderRegex.FindStringSubmatch(linkHeader)
+		if len(matches) > 1 {
+			nextURL = matches[1]
+		}
+	}
+
+	return prs, nextURL, nil
 }

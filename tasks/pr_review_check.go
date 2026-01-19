@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -70,12 +71,16 @@ func NewPRReviewCheckTask(cfg config.GitHubConfig, notifier notifier.Notifier) *
 //   - Always returns nil (errors are logged but don't stop the scheduler)
 //   - Individual repo/PR failures are logged and skipped
 func (t *PRReviewCheckTask) Run() error {
+	// Create a context with a reasonable timeout for the entire task
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
 	staleDays := t.config.GetStaleDays()
 
 	// Iterate through all configured repositories
 	for _, repoConfig := range t.config.Repositories {
-		// Fetch open PRs from GitHub
-		prs, err := t.apiClient.GetOpenPullRequests(repoConfig.Owner, repoConfig.Repo)
+		// Fetch open PRs from GitHub (now with pagination for all PRs)
+		prs, err := t.apiClient.GetOpenPullRequests(ctx, repoConfig.Owner, repoConfig.Repo)
 		if err != nil {
 			// Log the error but continue with other repos
 			log.Error().
@@ -140,13 +145,13 @@ func (t *PRReviewCheckTask) Run() error {
 			var ciMsg string
 
 			// 1. Get Commit Status (Legacy / CircleCI / Jenkins)
-			commitStatus, errStatus := t.apiClient.GetCommitStatus(repoConfig.Owner, repoConfig.Repo, pr.Head.SHA)
+			commitStatus, errStatus := t.apiClient.GetCommitStatus(ctx, repoConfig.Owner, repoConfig.Repo, pr.Head.SHA)
 			if errStatus != nil {
 				log.Error().Err(errStatus).Str("pr", prID).Msg("Failed to check commit status")
 			}
 
 			// 2. Get Check Suites (GitHub Actions)
-			checkSuites, errChecks := t.apiClient.GetCheckSuites(repoConfig.Owner, repoConfig.Repo, pr.Head.SHA)
+			checkSuites, errChecks := t.apiClient.GetCheckSuites(ctx, repoConfig.Owner, repoConfig.Repo, pr.Head.SHA)
 			if errChecks != nil {
 				log.Error().Err(errChecks).Str("pr", prID).Msg("Failed to check suites")
 			}
@@ -183,7 +188,7 @@ func (t *PRReviewCheckTask) Run() error {
 				pr.UpdatedAt.Format(time.RFC1123), pr.HTMLURL)
 
 			log.Info().Str("pr", prID).Msg("Sending notification for stale PR")
-			err = t.notifier.SendNotification(subject, message)
+			err = t.notifier.SendNotification(ctx, subject, message)
 			if err != nil {
 				// Log the error but continue with other PRs
 				log.Error().Err(err).Str("pr", prID).Msg("Failed to send notification")

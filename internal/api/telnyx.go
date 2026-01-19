@@ -1,12 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
-	"time"
 )
 
 // TelnyxBalanceResponse represents the JSON structure returned by the Telnyx balance API.
@@ -51,20 +51,18 @@ func NewTelnyxAPI(apiURL, apiKey string) *TelnyxAPI {
 // GetBalance fetches the current account balance from Telnyx.
 // It makes an authenticated GET request to the Telnyx API and parses the balance.
 //
+// Parameters:
+//   - ctx: Context for cancellation and deadline propagation
+//
 // Returns:
 //   - The account balance as a float64 (e.g., 25.50)
 //   - An error if the request fails, authentication fails, or the response is invalid
 //
 // The balance is returned as a float so it can be easily compared with the threshold
 // configured in the application settings.
-func (t *TelnyxAPI) GetBalance() (float64, error) {
-	// Create HTTP client with a 10-second timeout to prevent hanging
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
+func (t *TelnyxAPI) GetBalance(ctx context.Context) (float64, error) {
 	// Create GET request to the balance endpoint
-	req, err := http.NewRequest("GET", t.APIURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", t.APIURL, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create request: %v", err)
 	}
@@ -73,17 +71,12 @@ func (t *TelnyxAPI) GetBalance() (float64, error) {
 	req.Header.Add("Authorization", "Bearer "+t.APIKey)
 	req.Header.Add("Accept", "application/json")
 
-	// Execute the request
-	resp, err := client.Do(req)
+	// Execute the request with retry logic
+	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch balance: %v", err)
 	}
-
-	// Ensure response body is closed when we're done
-	// We explicitly ignore the error since there's nothing we can do about it
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check if the request was successful
 	// Non-200 status could indicate authentication failure or API issues

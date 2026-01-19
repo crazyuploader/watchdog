@@ -100,10 +100,11 @@ func (s *Scheduler) HasTasks() bool {
 //
 // How it works:
 //  1. For each scheduled task, a goroutine is spawned
-//  2. Each goroutine creates a ticker that fires at the task's interval
-//  3. When the ticker fires, the task's Run() method is called
-//  4. If Run() returns an error, it's logged but execution continues
-//  5. The goroutine continues until Stop() is called or the program exits
+//  2. The task is executed immediately (before the first ticker fires)
+//  3. Each goroutine creates a ticker that fires at the task's interval
+//  4. When the ticker fires, the task's Run() method is called
+//  5. If Run() returns an error, it's logged but execution continues
+//  6. The goroutine continues until Stop() is called or the program exits
 //
 // This method returns immediately after starting all goroutines.
 // The tasks will continue running in the background.
@@ -117,6 +118,21 @@ func (s *Scheduler) Start() {
 		// We pass 'st' as a parameter to avoid closure issues
 		go func(task *scheduledTask) {
 			defer s.wg.Done()
+
+			// Run the task immediately on start
+			// This ensures we get immediate feedback rather than waiting for the first interval
+			log.Info().Msg("Running task immediately on start")
+			if err := task.task.Run(); err != nil {
+				log.Error().Err(err).Msg("Initial task execution failed")
+			}
+
+			// Check for stop signal after initial run
+			select {
+			case <-task.stop:
+				return
+			default:
+			}
+
 			// Create a ticker that fires at the specified interval
 			ticker := time.NewTicker(task.interval)
 			defer ticker.Stop()

@@ -17,9 +17,20 @@ import (
 	"watchdog/tasks"
 )
 
+// Version information populated by ldflags during build.
+// These are set by GoReleaser or manual builds with -ldflags.
+var (
+	version   = "dev"
+	commit    = "none"
+	buildDate = "unknown"
+)
+
 // cfgFile holds the path to the configuration file specified via command-line flag.
 // If empty, the application will look for config.yaml in the current directory.
 var cfgFile string
+
+// showVersion indicates if the --version flag was provided.
+var showVersion bool
 
 // appConfig stores the parsed configuration from the YAML file.
 // This includes settings for Telnyx monitoring, GitHub PR monitoring, notifications, and scheduling.
@@ -40,6 +51,10 @@ var rootCmd = &cobra.Command{
 		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		if showVersion {
+			fmt.Printf("watchdog version %s\ncommit: %s\nbuilt: %s\n", version, commit, buildDate)
+			return
+		}
 		runApp()
 	},
 }
@@ -56,13 +71,12 @@ func Execute() {
 }
 
 // init is called automatically before main() and sets up the CLI flags and configuration.
-// It registers the initConfig function to be called before command execution,
-// init registers initConfig to run on Cobra initialization and defines the
-// persistent --config flag to specify a custom configuration file path
-// (default ./config.yaml).
+// It registers the initConfig function to be called on Cobra initialization and defines
+// persistent flags including --config and --version.
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
+	rootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "v", false, "show version information")
 }
 
 // initConfig reads the configuration file and unmarshals it into the appConfig struct.

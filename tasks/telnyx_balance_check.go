@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"fmt"
 	"time"
 	"watchdog/internal/api"
@@ -91,8 +92,12 @@ func NewTelnyxBalanceCheckTask(apiURL, apiKey string, threshold float64, cooldow
 // The cooldown mechanism prevents spamming alerts every 5 minutes when balance is low.
 // For example, with a 6-hour cooldown, you'll only get one alert every 6 hours.
 func (t *TelnyxBalanceCheckTask) Run() error {
+	// Create a context with a reasonable timeout for the task
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// Fetch current balance from Telnyx
-	balance, err := t.apiClient.GetBalance()
+	balance, err := t.apiClient.GetBalance(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get balance: %v", err)
 	}
@@ -121,7 +126,7 @@ func (t *TelnyxBalanceCheckTask) Run() error {
 		// Balance is low and cooldown has expired - send notification
 		subject := "Telnyx Balance Alert"
 		message := fmt.Sprintf("Your Telnyx balance ($%.2f) has fallen below the $%.2f threshold.", balance, t.threshold)
-		err = t.notifier.SendNotification(subject, message)
+		err = t.notifier.SendNotification(ctx, subject, message)
 		if err != nil {
 			return fmt.Errorf("failed to send notification: %v", err)
 		}

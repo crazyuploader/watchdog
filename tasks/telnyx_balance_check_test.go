@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -15,8 +16,8 @@ type MockTelnyxClient struct {
 	mock.Mock
 }
 
-func (m *MockTelnyxClient) GetBalance() (float64, error) {
-	args := m.Called()
+func (m *MockTelnyxClient) GetBalance(ctx context.Context) (float64, error) {
+	args := m.Called(ctx)
 	return args.Get(0).(float64), args.Error(1)
 }
 
@@ -25,8 +26,8 @@ type MockNotifier struct {
 	mock.Mock
 }
 
-func (m *MockNotifier) SendNotification(subject, message string) error {
-	args := m.Called(subject, message)
+func (m *MockNotifier) SendNotification(ctx context.Context, subject, message string) error {
+	args := m.Called(ctx, subject, message)
 	return args.Error(0)
 }
 
@@ -54,7 +55,7 @@ func TestTelnyxBalanceCheckTask_Run_BalanceAboveThreshold(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(25.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(25.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
@@ -65,7 +66,7 @@ func TestTelnyxBalanceCheckTask_Run_BalanceAboveThreshold(t *testing.T) {
 	assert.NoError(t, err)
 	mockAPI.AssertExpectations(t)
 	// Notifier should not be called when balance is above threshold
-	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything)
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTelnyxBalanceCheckTask_Run_BalanceBelowThreshold_SendsNotification(t *testing.T) {
@@ -75,11 +76,11 @@ func TestTelnyxBalanceCheckTask_Run_BalanceBelowThreshold_SendsNotification(t *t
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(5.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(5.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
-	mockNotifier.On("SendNotification", "Telnyx Balance Alert", mock.MatchedBy(func(msg string) bool {
+	mockNotifier.On("SendNotification", mock.Anything, "Telnyx Balance Alert", mock.MatchedBy(func(msg string) bool {
 		return assert.Contains(t, msg, "$5.00") && assert.Contains(t, msg, "$10.00")
 	})).Return(nil)
 	task.notifier = mockNotifier
@@ -100,7 +101,7 @@ func TestTelnyxBalanceCheckTask_Run_BalanceBelowThreshold_RespectsCooldown(t *te
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(5.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(5.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
@@ -111,7 +112,7 @@ func TestTelnyxBalanceCheckTask_Run_BalanceBelowThreshold_RespectsCooldown(t *te
 	assert.NoError(t, err)
 	mockAPI.AssertExpectations(t)
 	// Should not send notification due to cooldown
-	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything)
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTelnyxBalanceCheckTask_Run_BalanceBelowThreshold_CooldownExpired(t *testing.T) {
@@ -122,11 +123,11 @@ func TestTelnyxBalanceCheckTask_Run_BalanceBelowThreshold_CooldownExpired(t *tes
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(5.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(5.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
-	mockNotifier.On("SendNotification", "Telnyx Balance Alert", mock.Anything).Return(nil)
+	mockNotifier.On("SendNotification", mock.Anything, "Telnyx Balance Alert", mock.Anything).Return(nil)
 	task.notifier = mockNotifier
 
 	err := task.Run()
@@ -143,7 +144,7 @@ func TestTelnyxBalanceCheckTask_Run_APIError(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(0.0, errors.New("API connection failed"))
+	mockAPI.On("GetBalance", mock.Anything).Return(0.0, errors.New("API connection failed"))
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
@@ -154,7 +155,7 @@ func TestTelnyxBalanceCheckTask_Run_APIError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get balance")
 	mockAPI.AssertExpectations(t)
-	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything)
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTelnyxBalanceCheckTask_Run_NotificationError(t *testing.T) {
@@ -164,11 +165,11 @@ func TestTelnyxBalanceCheckTask_Run_NotificationError(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(5.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(5.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
-	mockNotifier.On("SendNotification", "Telnyx Balance Alert", mock.Anything).Return(errors.New("notification failed"))
+	mockNotifier.On("SendNotification", mock.Anything, "Telnyx Balance Alert", mock.Anything).Return(errors.New("notification failed"))
 	task.notifier = mockNotifier
 
 	err := task.Run()
@@ -188,7 +189,7 @@ func TestTelnyxBalanceCheckTask_Run_BalanceExactlyAtThreshold(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(10.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(10.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
@@ -199,7 +200,7 @@ func TestTelnyxBalanceCheckTask_Run_BalanceExactlyAtThreshold(t *testing.T) {
 	assert.NoError(t, err)
 	mockAPI.AssertExpectations(t)
 	// Balance exactly at threshold should not trigger notification
-	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything)
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTelnyxBalanceCheckTask_Run_VeryLowBalance(t *testing.T) {
@@ -209,11 +210,11 @@ func TestTelnyxBalanceCheckTask_Run_VeryLowBalance(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(0.01, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(0.01, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
-	mockNotifier.On("SendNotification", "Telnyx Balance Alert", mock.MatchedBy(func(msg string) bool {
+	mockNotifier.On("SendNotification", mock.Anything, "Telnyx Balance Alert", mock.MatchedBy(func(msg string) bool {
 		return assert.Contains(t, msg, "$0.01")
 	})).Return(nil)
 	task.notifier = mockNotifier
@@ -232,11 +233,11 @@ func TestTelnyxBalanceCheckTask_Run_NegativeBalance(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(-5.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(-5.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
-	mockNotifier.On("SendNotification", "Telnyx Balance Alert", mock.MatchedBy(func(msg string) bool {
+	mockNotifier.On("SendNotification", mock.Anything, "Telnyx Balance Alert", mock.MatchedBy(func(msg string) bool {
 		return assert.Contains(t, msg, "$-5.00")
 	})).Return(nil)
 	task.notifier = mockNotifier
@@ -255,11 +256,11 @@ func TestTelnyxBalanceCheckTask_Run_MultipleCalls_UpdatesLastNotificationTime(t 
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(5.0, nil).Times(2)
+	mockAPI.On("GetBalance", mock.Anything).Return(5.0, nil).Times(2)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
-	mockNotifier.On("SendNotification", "Telnyx Balance Alert", mock.Anything).Return(nil).Once()
+	mockNotifier.On("SendNotification", mock.Anything, "Telnyx Balance Alert", mock.Anything).Return(nil).Once()
 	task.notifier = mockNotifier
 
 	// First call - should send notification
@@ -288,7 +289,7 @@ func TestTelnyxBalanceCheckTask_Run_ZeroThreshold(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(5.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(5.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
@@ -299,7 +300,7 @@ func TestTelnyxBalanceCheckTask_Run_ZeroThreshold(t *testing.T) {
 	assert.NoError(t, err)
 	mockAPI.AssertExpectations(t)
 	// Positive balance above zero threshold
-	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything)
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTelnyxBalanceCheckTask_Run_FirstNotification(t *testing.T) {
@@ -310,11 +311,11 @@ func TestTelnyxBalanceCheckTask_Run_FirstNotification(t *testing.T) {
 	}
 
 	mockAPI := &MockTelnyxClient{}
-	mockAPI.On("GetBalance").Return(5.0, nil)
+	mockAPI.On("GetBalance", mock.Anything).Return(5.0, nil)
 	task.apiClient = mockAPI
 
 	mockNotifier := &MockNotifier{}
-	mockNotifier.On("SendNotification", "Telnyx Balance Alert", mock.Anything).Return(nil)
+	mockNotifier.On("SendNotification", mock.Anything, "Telnyx Balance Alert", mock.Anything).Return(nil)
 	task.notifier = mockNotifier
 
 	err := task.Run()
