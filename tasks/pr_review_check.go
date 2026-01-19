@@ -8,6 +8,8 @@ import (
 	"watchdog/internal/api"
 	"watchdog/internal/config"
 	"watchdog/internal/notifier"
+
+	"github.com/rs/zerolog/log"
 )
 
 // PRReviewCheckTask monitors GitHub repositories for stale pull requests.
@@ -76,7 +78,11 @@ func (t *PRReviewCheckTask) Run() error {
 		prs, err := t.apiClient.GetOpenPullRequests(repoConfig.Owner, repoConfig.Repo)
 		if err != nil {
 			// Log the error but continue with other repos
-			fmt.Printf("Failed to fetch PRs for %s/%s: %v\n", repoConfig.Owner, repoConfig.Repo, err)
+			log.Error().
+				Err(err).
+				Str("owner", repoConfig.Owner).
+				Str("repo", repoConfig.Repo).
+				Msg("Failed to fetch PRs")
 			continue
 		}
 
@@ -133,11 +139,11 @@ func (t *PRReviewCheckTask) Run() error {
 				pr.Number, repoConfig.Owner, repoConfig.Repo, pr.User.Login,
 				pr.UpdatedAt.Format(time.RFC1123), pr.HTMLURL)
 
-			fmt.Printf("Sending notification for stale PR: %s\n", prID)
+			log.Info().Str("pr", prID).Msg("Sending notification for stale PR")
 			err := t.notifier.SendNotification(subject, message)
 			if err != nil {
 				// Log the error but continue with other PRs
-				fmt.Printf("Failed to send notification for %s: %v\n", prID, err)
+				log.Error().Err(err).Str("pr", prID).Msg("Failed to send notification")
 			} else {
 				// Record that we sent a notification for this PR
 				// This starts the cooldown period

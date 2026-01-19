@@ -6,6 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -32,6 +34,11 @@ var rootCmd = &cobra.Command{
   - Checks your Telnyx account balance and alerts when it drops below a threshold
   - Monitors GitHub pull requests and notifies when they're stale (pending review for too long)
   - Sends notifications via Apprise (supports Telegram, Discord, email, and more)`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Initialize the global logger with pretty console output
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		runApp()
 	},
@@ -159,11 +166,11 @@ func runApp() {
 	// Initialize the scheduler that will run our tasks periodically
 	sched := scheduler.NewScheduler()
 
-	fmt.Printf("Loaded configuration using: %s\n", viper.ConfigFileUsed())
+	log.Info().Str("config_file", viper.ConfigFileUsed()).Msg("Configuration loaded")
 
 	// Get global default interval from scheduler config
 	globalInterval := appConfig.Scheduler.GetInterval()
-	fmt.Printf("Global scheduler interval: %v\n", globalInterval)
+	log.Info().Dur("global_interval", globalInterval).Msg("Global scheduler interval set")
 
 	// Initialize the notifier - this handles sending alerts via Apprise
 	// Apprise supports multiple notification services (Telegram, Discord, email, etc.)
@@ -175,8 +182,11 @@ func runApp() {
 	telnyxCfg := appConfig.Tasks.Telnyx
 	if telnyxCfg.APIURL != "" && telnyxCfg.APIKey != "" {
 		telnyxInterval := telnyxCfg.GetInterval(globalInterval)
-		fmt.Printf("Monitoring Telnyx balance at %s with threshold $%.2f (interval: %v)\n",
-			telnyxCfg.APIURL, telnyxCfg.Threshold, telnyxInterval)
+		log.Info().
+			Str("api_url", telnyxCfg.APIURL).
+			Float64("threshold", telnyxCfg.Threshold).
+			Dur("interval", telnyxInterval).
+			Msg("Telnyx monitoring enabled")
 
 		task := tasks.NewTelnyxBalanceCheckTask(
 			telnyxCfg.APIURL,
@@ -187,7 +197,7 @@ func runApp() {
 		)
 		sched.ScheduleTask(task, telnyxInterval)
 	} else {
-		fmt.Println("Telnyx monitoring disabled (api_url or api_key not configured)")
+		log.Info().Msg("Telnyx monitoring disabled (api_url or api_key not configured)")
 	}
 
 	// Register and schedule GitHub PR review check task if repositories are configured
@@ -195,26 +205,25 @@ func runApp() {
 	githubCfg := appConfig.Tasks.GitHub
 	if len(githubCfg.Repositories) > 0 {
 		githubInterval := githubCfg.GetInterval(globalInterval)
-		fmt.Printf("Monitoring %d GitHub repositories for stale PRs (threshold: %d days, interval: %v)\n",
-			len(githubCfg.Repositories), githubCfg.GetStaleDays(), githubInterval)
+		log.Info().
+			Int("repository_count", len(githubCfg.Repositories)).
+			Int("stale_threshold_days", githubCfg.GetStaleDays()).
+			Dur("interval", githubInterval).
+			Msg("GitHub monitoring enabled")
 
 		prTask := tasks.NewPRReviewCheckTask(githubCfg, notif)
 		sched.ScheduleTask(prTask, githubInterval)
 	} else {
-		fmt.Println("GitHub monitoring disabled (no repositories configured)")
+		log.Info().Msg("GitHub monitoring disabled (no repositories configured)")
 	}
 
 	// Check if at least one task was scheduled
 	if !sched.HasTasks() {
-		fmt.Fprintln(os.Stderr, "\nError: No tasks configured!")
-		fmt.Fprintln(os.Stderr, "Please configure at least one of:")
-		fmt.Fprintln(os.Stderr, "  - Telnyx monitoring (tasks.telnyx.api_url and api_key)")
-		fmt.Fprintln(os.Stderr, "  - GitHub monitoring (tasks.github.repositories)")
-		os.Exit(1)
+		log.Fatal().Msg("No tasks configured! Please configure at least one of: Telnyx monitoring or GitHub monitoring")
 	}
 
 	// Start the scheduler - this begins executing all registered tasks
-	fmt.Println("Starting scheduler...")
+	log.Info().Msg("Starting scheduler...")
 	sched.Start()
 
 	// Wait for interrupt signal for graceful shutdown
@@ -222,11 +231,11 @@ func runApp() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	fmt.Println("Watchdog is running. Press Ctrl+C to stop.")
+	log.Info().Msg("Watchdog is running. Press Ctrl+C to stop.")
 	<-sigChan
 
 	// Graceful shutdown
-	fmt.Println("\nShutting down gracefully...")
+	log.Info().Msg("Shutting down gracefully...")
 	sched.Stop()
-	fmt.Println("Shutdown complete.")
+	log.Info().Msg("Shutdown complete.")
 }

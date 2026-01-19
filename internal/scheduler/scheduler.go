@@ -1,9 +1,10 @@
 package scheduler
 
 import (
-	"fmt"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Task defines the interface that all schedulable tasks must implement.
@@ -137,7 +138,7 @@ func (s *Scheduler) Start() {
 					if err != nil {
 						// Log the error but continue running
 						// We don't want one task failure to stop the scheduler
-						fmt.Printf("Error running task: %v\n", err)
+						log.Error().Err(err).Msg("Task execution failed")
 					}
 				case <-task.stop:
 					// Stop signal received - exit the goroutine

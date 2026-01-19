@@ -5,6 +5,8 @@ import (
 	"time"
 	"watchdog/internal/api"
 	"watchdog/internal/notifier"
+
+	"github.com/rs/zerolog/log"
 )
 
 // TelnyxBalanceCheckTask monitors your Telnyx account balance.
@@ -34,6 +36,14 @@ type TelnyxBalanceCheckTask struct {
 
 	// notifier is used to send alerts (via Apprise/Telegram/Discord/etc.)
 	notifier notifier.Notifier
+
+	// lastObservedBalance tracks the previously fetched balance
+	// Used to deduplicate logs - we only log when the balance changes
+	lastObservedBalance float64
+
+	// hasRunBefore indicates if this task has executed at least once
+	// Used to ensure we always log the balance on the very first run
+	hasRunBefore bool
 }
 
 // NewTelnyxBalanceCheckTask creates a new Telnyx balance monitoring task.
@@ -87,8 +97,13 @@ func (t *TelnyxBalanceCheckTask) Run() error {
 		return fmt.Errorf("failed to get balance: %v", err)
 	}
 
-	// Log the balance for monitoring/debugging
-	fmt.Printf("Current balance: $%.2f\n", balance)
+	// Log the balance ONLY if it has changed since the last check
+	// This reduces log spam in the console
+	if !t.hasRunBefore || balance != t.lastObservedBalance {
+		log.Info().Float64("balance", balance).Msg("Current Telnyx balance")
+		t.lastObservedBalance = balance
+		t.hasRunBefore = true
+	}
 
 	// Check if balance is below threshold
 	if balance < t.threshold {
@@ -96,7 +111,10 @@ func (t *TelnyxBalanceCheckTask) Run() error {
 		// We don't want to spam notifications every 5 minutes when balance is low
 		// Only send if we haven't notified recently (or if this is the first notification)
 		if !t.lastNotificationTime.IsZero() && time.Since(t.lastNotificationTime) < t.notificationCooldown {
-			fmt.Printf("Balance below threshold, but notification skipped due to cooldown (last sent: %v)\n", t.lastNotificationTime)
+			log.Info().
+				Float64("balance", balance).
+				Time("last_sent", t.lastNotificationTime).
+				Msg("Balance below threshold, skipping notification due to cooldown")
 			return nil
 		}
 

@@ -1,34 +1,55 @@
 package config
 
 import (
-	"log"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
-// Config is the root configuration structure that holds all application settings.
-// It's populated from the YAML config file using Viper's mapstructure tags.
-// The config file should contain sections for tasks, notifier, and scheduler.
+// Config represents the top-level configuration structure.
+// It maps directly to the YAML configuration file format.
 type Config struct {
-	Tasks     TasksConfig     `mapstructure:"tasks"`
-	Notifier  NotifierConfig  `mapstructure:"notifier"`
+	// Tasks contains configuration for specific monitoring tasks
+	Tasks TasksConfig `mapstructure:"tasks"`
+
+	// Notifier contains configuration for alerting (Apprise)
+	Notifier NotifierConfig `mapstructure:"notifier"`
+
+	// Scheduler contains global scheduling settings
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
 }
 
-// parseDurationWithDefault parses a duration string and returns a default if parsing fails.
-// parseDurationWithDefault parses value as a time.Duration and returns defaultDuration when value is empty or invalid.
-// When parsing fails it logs a warning that includes configPath and the invalid value before returning defaultDuration.
-func parseDurationWithDefault(value string, defaultDuration time.Duration, configPath string) time.Duration {
-	value = strings.TrimSpace(value)
-	if value == "" {
+// parseDurationWithDefault attempts to parse a duration string.
+// If the string is valid, it returns the parsed duration.
+// If the string is empty, invalid, or non-positive (<= 0), it logs a warning and returns the defaultDuration.
+// It also handles whitespace trimming.
+func parseDurationWithDefault(s string, defaultDuration time.Duration, fieldName string) time.Duration {
+	s = strings.TrimSpace(s)
+	if s == "" {
 		return defaultDuration
 	}
-	d, err := time.ParseDuration(value)
-	if err != nil || d <= 0 {
-		log.Printf("Warning: Invalid duration '%s' for %s, using default %v (hint: use format like '5m', '1h', '24h')\n",
-			value, configPath, defaultDuration)
+
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Str("field", fieldName).
+			Str("invalid_value", s).
+			Dur("default", defaultDuration).
+			Msg("Invalid duration format, using default")
 		return defaultDuration
 	}
+
+	if d <= 0 {
+		log.Warn().
+			Str("field", fieldName).
+			Str("invalid_value", s).
+			Dur("default", defaultDuration).
+			Msg("Non-positive duration not allowed, using default")
+		return defaultDuration
+	}
+
 	return d
 }
 
