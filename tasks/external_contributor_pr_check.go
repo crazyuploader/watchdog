@@ -35,6 +35,12 @@ func (t *ExternalContributorPRTask) Run() error {
 	defer cancel()
 
 	for _, repoConfig := range t.config.Repositories {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		prs, err := t.apiClient.GetOpenPullRequests(ctx, repoConfig.Owner, repoConfig.Repo)
 		if err != nil {
 			log.Error().

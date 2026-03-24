@@ -285,13 +285,13 @@ func (g *GitHubAPI) GetOrgMembers(ctx context.Context, org string) ([]User, erro
 
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create request: %v", err)
+			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
 		g.setCommonHeaders(req)
 
 		resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch org members: %v", err)
+			return nil, fmt.Errorf("failed to fetch org members: %w", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
 
@@ -306,12 +306,12 @@ func (g *GitHubAPI) GetOrgMembers(ctx context.Context, org string) ([]User, erro
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read response body: %v", err)
+			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 
 		var members []User
 		if err := json.Unmarshal(body, &members); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 		}
 
 		allMembers = append(allMembers, members...)
