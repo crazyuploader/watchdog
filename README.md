@@ -39,31 +39,7 @@ Specify a custom config file:
 
 ## Configuration
 
-See `sample_config.yaml` for all configuration options.
-
-### External Contributor PR Monitoring
-
-The `external_contributor_prs` task monitors repositories for PRs created by external contributors (users not in the org members list). This is useful for:
-
-- Tracking contributions from the community
-- Ensuring external PRs get attention
-- Avoiding missing review requests from contributors
-
-Example configuration:
-
-```yaml
-tasks:
-  external_contributor_prs:
-    interval: "60m"
-    notification_cooldown: "24h"
-    repositories:
-      - owner: "SigNoz"
-        repo: "signoz.io"
-        org_members:
-          - "member1"
-          - "member2"
-        pr_lookback_days: 7
-```
+See [`sample_config.yaml`](sample_config.yaml) for all configuration options.
 
 ## License
 
