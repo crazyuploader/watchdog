@@ -43,6 +43,14 @@ func (m *MockGitHubClient) GetCheckSuites(ctx context.Context, owner, repo, ref 
 	return args.Get(0).(*api.CheckSuitesResponse), args.Error(1)
 }
 
+func (m *MockGitHubClient) GetOrgMembers(ctx context.Context, org string) ([]api.User, error) {
+	args := m.Called(ctx, org)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]api.User), args.Error(1)
+}
+
 func TestNewPRReviewCheckTask(t *testing.T) {
 	cfg := config.GitHubConfig{
 		Token:     "ghp_test",

@@ -8,6 +8,7 @@ type GitHubClient interface {
 	GetOpenPullRequests(ctx context.Context, owner, repo string) ([]PullRequest, error)
 	GetCommitStatus(ctx context.Context, owner, repo, ref string) (*CommitStatus, error)
 	GetCheckSuites(ctx context.Context, owner, repo, ref string) (*CheckSuitesResponse, error)
+	GetOrgMembers(ctx context.Context, org string) ([]User, error)
 }
 
 // Ensure GitHubAPI implements GitHubClient interface

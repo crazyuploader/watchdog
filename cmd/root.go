@@ -231,6 +231,22 @@ func runApp() {
 		log.Info().Msg("GitHub monitoring disabled (no repositories configured)")
 	}
 
+	// Register and schedule External Contributor PR check task if repositories are configured
+	// This task monitors for PRs created by external contributors (not org members)
+	externalPRCfg := appConfig.Tasks.ExternalContributorPRs
+	if len(externalPRCfg.Repositories) > 0 {
+		externalInterval := externalPRCfg.GetInterval(globalInterval)
+		log.Info().
+			Int("repository_count", len(externalPRCfg.Repositories)).
+			Dur("interval", externalInterval).
+			Msg("External contributor PR monitoring enabled")
+
+		externalPRTask := tasks.NewExternalContributorPRTask(externalPRCfg, notif)
+		sched.ScheduleTask(externalPRTask, externalInterval)
+	} else {
+		log.Info().Msg("External contributor PR monitoring disabled (no repositories configured)")
+	}
+
 	// Check if at least one task was scheduled
 	if !sched.HasTasks() {
 		log.Fatal().Msg("No tasks configured! Please configure at least one of: Telnyx monitoring or GitHub monitoring")

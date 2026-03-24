@@ -32,6 +32,30 @@ tasks:
         repo: "repo3"
         authors: [] # Empty list = monitor all PRs regardless of author
 
+  external_contributor_prs:
+    # Monitor for PRs from external contributors (not org members)
+    interval: "60m"
+    token: "ghp_xxxxxxxxxxxx" # Optional: GitHub Personal Access Token for higher rate limits
+    notification_cooldown: "24h"
+    repositories:
+      # Example 1: Monitor a repo for external contributor PRs
+      # Automatically fetches org members from GitHub
+      # Only alerts on PRs created within the last 7 days by users not in the org
+      - owner: "owner1"
+        repo: "repo1"
+        pr_lookback_days: 7
+
+      # Example 2: Monitor another repo for external contributor PRs
+      # Automatically fetches org members from GitHub
+      # Only alerts on PRs created within the last 7 days by users not in the org
+      - owner: "owner2"
+        repo: "repo2"
+        pr_lookback_days: 7
+        org_members:
+          - "member1"
+          - "member2"
+          - "member3"
+
 notifier:
   apprise_api_url: "https://your-custom-endpoint.com/notify"
   apprise_service_url: "discord://webhook_id/webhook_token,mailto://user:pass@gmail.com"

@@ -56,8 +56,9 @@ func parseDurationWithDefault(s string, defaultDuration time.Duration, fieldName
 // TasksConfig groups all task-specific configurations.
 // Each task can optionally override the global scheduler interval.
 type TasksConfig struct {
-	Telnyx TelnyxConfig `mapstructure:"telnyx"`
-	GitHub GitHubConfig `mapstructure:"github"`
+	Telnyx                 TelnyxConfig                `mapstructure:"telnyx"`
+	GitHub                 GitHubConfig                `mapstructure:"github"`
+	ExternalContributorPRs ExternalContributorPRConfig `mapstructure:"external_contributor_prs"`
 }
 
 // GitHubConfig holds all settings for GitHub pull request monitoring.
@@ -120,6 +121,35 @@ func (g GitHubConfig) GetStaleDays() int {
 // This allows GitHub checks to run less frequently than other tasks (e.g., every 60m to respect rate limits).
 func (g GitHubConfig) GetInterval(globalDefault time.Duration) time.Duration {
 	return parseDurationWithDefault(g.Interval, globalDefault, "tasks.github.interval")
+}
+
+type ExternalContributorPRConfig struct {
+	Interval             string                          `mapstructure:"interval"`
+	Token                string                          `mapstructure:"token"`
+	Repositories         []ExternalContributorRepoConfig `mapstructure:"repositories"`
+	NotificationCooldown string                          `mapstructure:"notification_cooldown"`
+}
+
+type ExternalContributorRepoConfig struct {
+	Owner          string   `mapstructure:"owner"`
+	Repo           string   `mapstructure:"repo"`
+	OrgMembers     []string `mapstructure:"org_members"`
+	PRLookbackDays int      `mapstructure:"pr_lookback_days"`
+}
+
+func (r ExternalContributorRepoConfig) GetPRLookbackDays() int {
+	if r.PRLookbackDays <= 0 {
+		return 7
+	}
+	return r.PRLookbackDays
+}
+
+func (e ExternalContributorPRConfig) GetNotificationCooldown() time.Duration {
+	return parseDurationWithDefault(e.NotificationCooldown, 24*time.Hour, "tasks.external_contributor_prs.notification_cooldown")
+}
+
+func (e ExternalContributorPRConfig) GetInterval(globalDefault time.Duration) time.Duration {
+	return parseDurationWithDefault(e.Interval, globalDefault, "tasks.external_contributor_prs.interval")
 }
 
 // TelnyxConfig holds settings for monitoring your Telnyx account balance.
