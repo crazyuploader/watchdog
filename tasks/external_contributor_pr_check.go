@@ -117,13 +117,13 @@ func (t *ExternalContributorPRTask) notifyExternalPRs(ctx context.Context, prs [
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("External contributor PRs in %s/%s:\n\n", repoConfig.Owner, repoConfig.Repo))
+	fmt.Fprintf(&sb, "External contributor PRs in %s/%s:\n\n", repoConfig.Owner, repoConfig.Repo)
 
 	for _, pr := range prs {
 		age := time.Since(pr.CreatedAt)
 		ageStr := formatDuration(age)
-		sb.WriteString(fmt.Sprintf("• #%d by %s - %s (%s old)\n  %s\n\n",
-			pr.Number, pr.User.Login, pr.Title, ageStr, pr.HTMLURL))
+		fmt.Fprintf(&sb, "• #%d by %s - %s (%s old)\n  %s\n\n",
+			pr.Number, pr.User.Login, pr.Title, ageStr, pr.HTMLURL)
 	}
 
 	subject := fmt.Sprintf("External PR Alert: %d new PR(s) in %s/%s", len(prs), repoConfig.Owner, repoConfig.Repo)
