@@ -64,7 +64,7 @@ func (t *TelnyxAPI) GetBalance(ctx context.Context) (float64, error) {
 	// Create GET request to the balance endpoint
 	req, err := http.NewRequestWithContext(ctx, "GET", t.APIURL, nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create request: %v", err)
+		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Add authentication header - Telnyx uses Bearer token authentication
@@ -74,7 +74,7 @@ func (t *TelnyxAPI) GetBalance(ctx context.Context) (float64, error) {
 	// Execute the request with retry logic
 	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
-		return 0, fmt.Errorf("failed to fetch balance: %v", err)
+		return 0, fmt.Errorf("failed to fetch balance: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -88,21 +88,21 @@ func (t *TelnyxAPI) GetBalance(ctx context.Context) (float64, error) {
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read response body: %v", err)
+		return 0, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	// Parse the JSON response
 	var balanceResponse TelnyxBalanceResponse
 	err = json.Unmarshal(body, &balanceResponse)
 	if err != nil {
-		return 0, fmt.Errorf("failed to unmarshal response: %v", err)
+		return 0, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	// Convert the balance string to a float
 	// Telnyx returns balance as a string, so we need to parse it
 	balance, err := strconv.ParseFloat(balanceResponse.Data.Balance, 64)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse balance string '%s': %v", balanceResponse.Data.Balance, err)
+		return 0, fmt.Errorf("failed to parse balance string '%s': %w", balanceResponse.Data.Balance, err)
 	}
 
 	return balance, nil

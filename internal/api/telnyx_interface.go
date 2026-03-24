@@ -8,5 +8,5 @@ type TelnyxClient interface {
 	GetBalance(ctx context.Context) (float64, error)
 }
 
-// Ensure TelnyxAPI implements TelnyxClient interface
+// Ensure TelnyxAPI implements TelnyxClient interface at compile time
 var _ TelnyxClient = (*TelnyxAPI)(nil)

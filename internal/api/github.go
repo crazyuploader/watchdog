@@ -124,13 +124,13 @@ func (g *GitHubAPI) GetCommitStatus(ctx context.Context, owner, repo, ref string
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	g.setCommonHeaders(req)
 
 	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch commit status: %v", err)
+		return nil, fmt.Errorf("failed to fetch commit status: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -141,12 +141,12 @@ func (g *GitHubAPI) GetCommitStatus(ctx context.Context, owner, repo, ref string
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var status CommitStatus
 	if err := json.Unmarshal(body, &status); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	return &status, nil
@@ -159,13 +159,13 @@ func (g *GitHubAPI) GetCheckSuites(ctx context.Context, owner, repo, ref string)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	g.setCommonHeaders(req)
 
 	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch check suites: %v", err)
+		return nil, fmt.Errorf("failed to fetch check suites: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -176,12 +176,12 @@ func (g *GitHubAPI) GetCheckSuites(ctx context.Context, owner, repo, ref string)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var suites CheckSuitesResponse
 	if err := json.Unmarshal(body, &suites); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	return &suites, nil
@@ -234,13 +234,13 @@ func (g *GitHubAPI) GetOpenPullRequests(ctx context.Context, owner, repo string)
 func (g *GitHubAPI) fetchPullRequestsPage(ctx context.Context, url string) ([]PullRequest, string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to create request: %v", err)
+		return nil, "", fmt.Errorf("failed to create request: %w", err)
 	}
 	g.setCommonHeaders(req)
 
 	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch pull requests: %v", err)
+		return nil, "", fmt.Errorf("failed to fetch pull requests: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -251,15 +251,14 @@ func (g *GitHubAPI) fetchPullRequestsPage(ctx context.Context, url string) ([]Pu
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to read response body: %v", err)
+		return nil, "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var prs []PullRequest
 	if err := json.Unmarshal(body, &prs); err != nil {
-		return nil, "", fmt.Errorf("failed to unmarshal response: %v", err)
+		return nil, "", fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	// Parse Link header for pagination
 	nextURL := ""
 	linkHeader := resp.Header.Get("Link")
 	if linkHeader != "" {
@@ -270,4 +269,62 @@ func (g *GitHubAPI) fetchPullRequestsPage(ctx context.Context, url string) ([]Pu
 	}
 
 	return prs, nextURL, nil
+}
+
+func (g *GitHubAPI) GetOrgMembers(ctx context.Context, org string) ([]User, error) {
+	var allMembers []User
+	url := fmt.Sprintf("%s/orgs/%s/public_members", g.BaseURL, org)
+
+	for url != "" {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		g.setCommonHeaders(req)
+
+		resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch org members: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode == 404 {
+			return []User{}, nil
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("github api request failed with status %d: %s", resp.StatusCode, string(body))
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
+
+		var members []User
+		if err := json.Unmarshal(body, &members); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+
+		allMembers = append(allMembers, members...)
+
+		nextURL := ""
+		linkHeader := resp.Header.Get("Link")
+		if linkHeader != "" {
+			matches := linkHeaderRegex.FindStringSubmatch(linkHeader)
+			if len(matches) > 1 {
+				nextURL = matches[1]
+			}
+		}
+		url = nextURL
+	}
+
+	return allMembers, nil
 }
