@@ -13,6 +13,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ExternalContributorPRTask monitors repositories for pull requests created by external contributors.
+// A contributor is considered "external" if they are not a member of the org.
+// The task fetches org members from GitHub API if not configured, then filters PRs.
 type ExternalContributorPRTask struct {
 	config               config.ExternalContributorPRConfig
 	apiClient            api.GitHubClient
@@ -21,6 +24,7 @@ type ExternalContributorPRTask struct {
 	mu                   sync.Mutex
 }
 
+// NewExternalContributorPRTask creates a new external contributor PR monitoring task.
 func NewExternalContributorPRTask(cfg config.ExternalContributorPRConfig, notifier notifier.Notifier) *ExternalContributorPRTask {
 	return &ExternalContributorPRTask{
 		config:               cfg,

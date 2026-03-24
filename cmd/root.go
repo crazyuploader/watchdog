@@ -134,10 +134,10 @@ func initConfig() {
 func validateConfig(cfg *config.Config) error {
 	// Validate notifier configuration
 	if cfg.Notifier.AppriseAPIURL == "" {
-		return fmt.Errorf("notifier.apprise_api_url is required but not set")
+		return fmt.Errorf("notifier: apprise_api_url is required")
 	}
 	if len(cfg.Notifier.GetServiceURLs()) == 0 {
-		return fmt.Errorf("notifier.apprise_service_url is required but not set")
+		return fmt.Errorf("notifier: apprise_service_url is required")
 	}
 
 	// Validate scheduler configuration
@@ -147,7 +147,7 @@ func validateConfig(cfg *config.Config) error {
 	// Validate Telnyx configuration if API URL is set
 	if cfg.Tasks.Telnyx.APIURL != "" {
 		if cfg.Tasks.Telnyx.APIKey == "" {
-			return fmt.Errorf("tasks.telnyx.api_key is required when api_url is set")
+			return fmt.Errorf("tasks.telnyx: api_key is required when api_url is set")
 		}
 	}
 
@@ -155,10 +155,22 @@ func validateConfig(cfg *config.Config) error {
 	if len(cfg.Tasks.GitHub.Repositories) > 0 {
 		for i, repo := range cfg.Tasks.GitHub.Repositories {
 			if repo.Owner == "" {
-				return fmt.Errorf("tasks.github.repositories[%d].owner is required", i)
+				return fmt.Errorf("tasks.github.repositories[%d]: owner is required", i)
 			}
 			if repo.Repo == "" {
-				return fmt.Errorf("tasks.github.repositories[%d].repo is required", i)
+				return fmt.Errorf("tasks.github.repositories[%d]: repo is required", i)
+			}
+		}
+	}
+
+	// Validate ExternalContributorPRs configuration if repositories are configured
+	if len(cfg.Tasks.ExternalContributorPRs.Repositories) > 0 {
+		for i, repo := range cfg.Tasks.ExternalContributorPRs.Repositories {
+			if repo.Owner == "" {
+				return fmt.Errorf("tasks.external_contributor_prs.repositories[%d]: owner is required", i)
+			}
+			if repo.Repo == "" {
+				return fmt.Errorf("tasks.external_contributor_prs.repositories[%d]: repo is required", i)
 			}
 		}
 	}

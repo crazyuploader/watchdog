@@ -138,6 +138,9 @@ func (w *WebhookNotifier) SendNotification(ctx context.Context, subject, message
 
 	// Retry loop with exponential backoff
 	var lastErr error
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
 	for attempt := 0; attempt <= webhookRetryConfig.MaxRetries; attempt++ {
 		// Check context before attempting
 		select {
@@ -166,10 +169,14 @@ func (w *WebhookNotifier) SendNotification(ctx context.Context, subject, message
 						Int("attempt", attempt+1).
 						Dur("backoff", backoff).
 						Msg("Webhook request failed, retrying...")
+					if !timer.Stop() {
+						<-timer.C
+					}
+					timer.Reset(backoff)
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
-					case <-time.After(backoff):
+					case <-timer.C:
 					}
 					continue
 				}
@@ -194,10 +201,14 @@ func (w *WebhookNotifier) SendNotification(ctx context.Context, subject, message
 				Int("attempt", attempt+1).
 				Dur("backoff", backoff).
 				Msg("Webhook request failed, retrying...")
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(backoff)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(backoff):
+			case <-timer.C:
 			}
 			continue
 		}

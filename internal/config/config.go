@@ -137,6 +137,9 @@ type ExternalContributorRepoConfig struct {
 	PRLookbackDays int      `mapstructure:"pr_lookback_days"`
 }
 
+// GetPRLookbackDays returns the number of days to look back for PRs.
+// Returns 7 days if not configured or set to 0.
+
 func (r ExternalContributorRepoConfig) GetPRLookbackDays() int {
 	if r.PRLookbackDays <= 0 {
 		return 7
