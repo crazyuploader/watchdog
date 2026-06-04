@@ -9,6 +9,7 @@ A lightweight Go-based framework for monitoring various services and sending not
   - Telnyx balance monitoring
   - GitHub PR review monitoring (stale PR detection)
   - External contributor PR monitoring
+  - OpenRouter credit, usage-limit, and completed-day request monitoring
 - Apprise-compatible notifications
 - Configurable via `config.yaml` or environment variables
 - Easy to extend with new monitoring tasks

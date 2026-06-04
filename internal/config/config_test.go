@@ -7,6 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func floatPtr(v float64) *float64 {
+	return &v
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestParseDurationWithDefault(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -67,6 +75,131 @@ func TestParseDurationWithDefault(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseDurationWithDefault(tt.value, tt.defaultDuration, "test.config")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestOpenRouterConfig_GetUsageLimitRatio(t *testing.T) {
+	tests := []struct {
+		name     string
+		ratio    *float64
+		expected float64
+	}{
+		{
+			name:     "missing ratio - use default",
+			ratio:    nil,
+			expected: 0.8,
+		},
+		{
+			name:     "explicit zero - disabled",
+			ratio:    floatPtr(0),
+			expected: 0,
+		},
+		{
+			name:     "valid ratio",
+			ratio:    floatPtr(0.5),
+			expected: 0.5,
+		},
+		{
+			name:     "negative ratio - use default",
+			ratio:    floatPtr(-0.1),
+			expected: 0.8,
+		},
+		{
+			name:     "greater than one - use default",
+			ratio:    floatPtr(1.1),
+			expected: 0.8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := OpenRouterConfig{
+				UsageLimitRatio: tt.ratio,
+			}
+
+			result := cfg.GetUsageLimitRatio()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestOpenRouterConfig_GetDailyRequestRatio(t *testing.T) {
+	tests := []struct {
+		name     string
+		ratio    *float64
+		expected float64
+	}{
+		{
+			name:     "missing ratio - use default",
+			ratio:    nil,
+			expected: 0.8,
+		},
+		{
+			name:     "explicit zero - disabled",
+			ratio:    floatPtr(0),
+			expected: 0,
+		},
+		{
+			name:     "valid ratio",
+			ratio:    floatPtr(0.7),
+			expected: 0.7,
+		},
+		{
+			name:     "negative ratio - use default",
+			ratio:    floatPtr(-0.1),
+			expected: 0.8,
+		},
+		{
+			name:     "greater than one - use default",
+			ratio:    floatPtr(1.1),
+			expected: 0.8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := OpenRouterConfig{
+				DailyRequestRatio: tt.ratio,
+			}
+
+			result := cfg.GetDailyRequestRatio()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestOpenRouterConfig_GetDailyRequestFreeOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		freeOnly *bool
+		expected bool
+	}{
+		{
+			name:     "missing value - default true",
+			freeOnly: nil,
+			expected: true,
+		},
+		{
+			name:     "explicit true",
+			freeOnly: boolPtr(true),
+			expected: true,
+		},
+		{
+			name:     "explicit false",
+			freeOnly: boolPtr(false),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := OpenRouterConfig{
+				DailyRequestFreeOnly: tt.freeOnly,
+			}
+
+			result := cfg.GetDailyRequestFreeOnly()
 			assert.Equal(t, tt.expected, result)
 		})
 	}
