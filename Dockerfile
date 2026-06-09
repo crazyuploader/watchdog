@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o watchdog ./cmd
 
 # ---
 
-FROM alpine:3.23
+FROM alpine:3.24
 
 WORKDIR /app
 
