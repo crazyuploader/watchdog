@@ -40,10 +40,11 @@ var appConfig config.Config
 // It serves as the entry point for the Cobra CLI framework and executes the main application logic.
 var rootCmd = &cobra.Command{
 	Use:   "watchdog",
-	Short: "A monitoring watchdog for Telnyx balance and GitHub PRs",
+	Short: "A monitoring watchdog for Telnyx balance, GitHub PRs, and OpenRouter credits",
 	Long: `Watchdog is a monitoring tool that:
   - Checks your Telnyx account balance and alerts when it drops below a threshold
   - Monitors GitHub pull requests and notifies when they're stale (pending review for too long)
+  - Monitors OpenRouter credits and usage limits and alerts when thresholds are exceeded
   - Sends notifications via Apprise (supports Telegram, Discord, email, and more)`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Initialize the global logger with pretty console output
@@ -175,6 +176,17 @@ func validateConfig(cfg *config.Config) error {
 		}
 	}
 
+	// Validate OpenRouter configuration if API key is set
+	if cfg.Tasks.OpenRouter.APIKey != "" {
+		dailyRequestMonitoringEnabled := cfg.Tasks.OpenRouter.DailyRequestLimit > 0 &&
+			cfg.Tasks.OpenRouter.GetDailyRequestRatio() > 0
+		if cfg.Tasks.OpenRouter.BalanceThreshold <= 0 &&
+			cfg.Tasks.OpenRouter.GetUsageLimitRatio() <= 0 &&
+			!dailyRequestMonitoringEnabled {
+			return fmt.Errorf("tasks.openrouter: at least one of balance_threshold (> 0), usage_limit_ratio (> 0), or daily_request_limit with daily_request_ratio (> 0) is required when api_key is set")
+		}
+	}
+
 	return nil
 }
 
@@ -259,12 +271,52 @@ func runApp() {
 		log.Info().Msg("External contributor PR monitoring disabled (no repositories configured)")
 	}
 
-	// Check if at least one task was scheduled
-	if !sched.HasTasks() {
-		log.Fatal().Msg("No tasks configured! Please configure at least one of: Telnyx monitoring or GitHub monitoring")
+	// Register OpenRouter credit monitoring task
+	openRouterCfg := appConfig.Tasks.OpenRouter
+	if openRouterCfg.APIKey != "" {
+		openRouterInterval := openRouterCfg.GetInterval(globalInterval)
+		usageLimitRatio := openRouterCfg.GetUsageLimitRatio()
+		dailyRequestRatio := openRouterCfg.GetDailyRequestRatio()
+		balanceInfo := ""
+		if openRouterCfg.BalanceThreshold > 0 {
+			balanceInfo = fmt.Sprintf(", balance_threshold=$%.2f", openRouterCfg.BalanceThreshold)
+		}
+		limitInfo := ""
+		if usageLimitRatio > 0 {
+			limitInfo = fmt.Sprintf(", usage_limit_ratio=%.0f%%", usageLimitRatio*100)
+		}
+		requestInfo := ""
+		if openRouterCfg.DailyRequestLimit > 0 && dailyRequestRatio > 0 {
+			requestInfo = fmt.Sprintf(", daily_request_limit=%d, daily_request_ratio=%.0f%%", openRouterCfg.DailyRequestLimit, dailyRequestRatio*100)
+		}
+		log.Info().
+			Str("base_url", openRouterCfg.GetBaseURL()).
+			Dur("interval", openRouterInterval).
+			Msg("OpenRouter monitoring enabled" + balanceInfo + limitInfo + requestInfo)
+
+		openRouterTask := tasks.NewOpenRouterBalanceCheckTaskWithOptions(tasks.OpenRouterBalanceCheckOptions{
+			BaseURL:              openRouterCfg.GetBaseURL(),
+			APIKey:               openRouterCfg.APIKey,
+			BalanceThreshold:     openRouterCfg.BalanceThreshold,
+			UsageLimitRatio:      usageLimitRatio,
+			DailyRequestLimit:    openRouterCfg.DailyRequestLimit,
+			DailyRequestRatio:    dailyRequestRatio,
+			DailyRequestFreeOnly: openRouterCfg.GetDailyRequestFreeOnly(),
+			ActivityAPIKeyHash:   openRouterCfg.ActivityAPIKeyHash,
+			NotificationCooldown: openRouterCfg.GetNotificationCooldown(),
+			Notifier:             notif,
+		})
+		sched.ScheduleTask(openRouterTask, openRouterInterval)
+	} else {
+		log.Info().Msg("OpenRouter monitoring disabled (api_key not configured)")
 	}
 
-	// Start the scheduler - this begins executing all registered tasks
+	// Check if at least one task was scheduled
+	if !sched.HasTasks() {
+		log.Fatal().Msg("No tasks configured! Please configure at least one monitoring task")
+	}
+
+	// Start the scheduler
 	log.Info().Msg("Starting scheduler...")
 	sched.Start()
 

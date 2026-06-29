@@ -56,6 +56,25 @@ tasks:
           - "member2"
           - "member3"
 
+  openrouter:
+    # OpenRouter credit monitoring
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "sk-or-v1-xxxxxxxxxxxx"
+    # Alert when remaining credits fall below this amount (0 to disable)
+    balance_threshold: 10.0
+    # Alert when usage exceeds this fraction of the monthly limit (0 to disable)
+    usage_limit_ratio: 0.8
+    # Alert when completed-UTC-day requests exceed limit * daily_request_ratio
+    # Requires a management/provisioning key (uses /api/v1/activity)
+    # OpenRouter only exposes completed UTC days, not today's in-progress count
+    daily_request_limit: 1000
+    daily_request_ratio: 0.8
+    # Count only zero-billed activity rows (free request tracking)
+    daily_request_free_only: true
+    # Set an api_key_hash from /api/v1/keys to monitor one key instead of account-level activity
+    activity_api_key_hash: ""
+    notification_cooldown: "6h"
+
 notifier:
   apprise_api_url: "https://your-custom-endpoint.com/notify"
   apprise_service_url: "discord://webhook_id/webhook_token,mailto://user:pass@gmail.com"

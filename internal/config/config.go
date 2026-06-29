@@ -59,6 +59,7 @@ type TasksConfig struct {
 	Telnyx                 TelnyxConfig                `mapstructure:"telnyx"`
 	GitHub                 GitHubConfig                `mapstructure:"github"`
 	ExternalContributorPRs ExternalContributorPRConfig `mapstructure:"external_contributor_prs"`
+	OpenRouter             OpenRouterConfig            `mapstructure:"openrouter"`
 }
 
 // GitHubConfig holds all settings for GitHub pull request monitoring.
@@ -187,6 +188,105 @@ func (t TelnyxConfig) GetInterval(globalDefault time.Duration) time.Duration {
 // This prevents repeatedly sending "low balance" alerts every check interval.
 func (t TelnyxConfig) GetNotificationCooldown() time.Duration {
 	return parseDurationWithDefault(t.NotificationCooldown, 6*time.Hour, "tasks.telnyx.notification_cooldown")
+}
+
+// OpenRouterConfig holds settings for monitoring your OpenRouter credits and usage limits.
+type OpenRouterConfig struct {
+	// Interval is an optional per-task override for the scheduler interval.
+	// If set, this task runs at this interval instead of the global scheduler interval.
+	// Format: "5m", "1h", etc. Leave empty to use the global default.
+	Interval string `mapstructure:"interval"`
+
+	// BaseURL is the base URL for the OpenRouter API.
+	// Default is "https://openrouter.ai/api/v1" if not specified.
+	BaseURL string `mapstructure:"base_url"`
+
+	// APIKey is your OpenRouter API key for authentication (starts with "sk-or-v1-").
+	APIKey string `mapstructure:"api_key"`
+
+	// BalanceThreshold is the minimum remaining credits in dollars.
+	// Alerts are sent when remaining credits fall below this threshold.
+	// Set to 0 to disable balance monitoring.
+	BalanceThreshold float64 `mapstructure:"balance_threshold"`
+
+	// UsageLimitRatio is the threshold ratio (0.0 to 1.0) for usage vs limit alerts.
+	// If the API key has a usage limit set, an alert is sent when usage exceeds
+	// limit * usage_limit_ratio. Default is 0.8 (80%).
+	// Set to 0 to disable usage limit monitoring.
+	UsageLimitRatio *float64 `mapstructure:"usage_limit_ratio"`
+
+	// DailyRequestLimit is the maximum allowed OpenRouter requests per completed UTC day.
+	// Set to 0 to disable request count monitoring.
+	DailyRequestLimit int `mapstructure:"daily_request_limit"`
+
+	// DailyRequestRatio is the threshold ratio (0.0 to 1.0) for daily request alerts.
+	// Default is 0.8 (80%). Set to 0 to disable request count monitoring.
+	DailyRequestRatio *float64 `mapstructure:"daily_request_ratio"`
+
+	// DailyRequestFreeOnly controls whether request count monitoring only counts rows
+	// with zero billed usage. Defaults to true because OpenRouter does not expose a
+	// dedicated free-request flag in the activity response.
+	DailyRequestFreeOnly *bool `mapstructure:"daily_request_free_only"`
+
+	// ActivityAPIKeyHash optionally filters /activity requests to a single API key.
+	// Leave empty to monitor account-level activity.
+	ActivityAPIKeyHash string `mapstructure:"activity_api_key_hash"`
+
+	// NotificationCooldown prevents spam by limiting alert frequency.
+	// Format: "6h", "1h30m", etc. Default is 6 hours.
+	NotificationCooldown string `mapstructure:"notification_cooldown"`
+}
+
+// GetBaseURL returns the base URL, defaulting to "https://openrouter.ai/api/v1".
+func (o OpenRouterConfig) GetBaseURL() string {
+	baseURL := strings.TrimSpace(o.BaseURL)
+	if baseURL == "" {
+		return "https://openrouter.ai/api/v1"
+	}
+	return strings.TrimRight(baseURL, "/")
+}
+
+// GetUsageLimitRatio returns the usage limit ratio threshold.
+// A missing value defaults to 0.8, while an explicit 0 disables usage-limit monitoring.
+func (o OpenRouterConfig) GetUsageLimitRatio() float64 {
+	if o.UsageLimitRatio == nil {
+		return 0.8
+	}
+	if *o.UsageLimitRatio < 0 || *o.UsageLimitRatio > 1 {
+		return 0.8
+	}
+	return *o.UsageLimitRatio
+}
+
+// GetDailyRequestRatio returns the daily request alert threshold.
+// A missing value defaults to 0.8, while an explicit 0 disables request count monitoring.
+func (o OpenRouterConfig) GetDailyRequestRatio() float64 {
+	if o.DailyRequestRatio == nil {
+		return 0.8
+	}
+	if *o.DailyRequestRatio < 0 || *o.DailyRequestRatio > 1 {
+		return 0.8
+	}
+	return *o.DailyRequestRatio
+}
+
+// GetDailyRequestFreeOnly returns whether daily request monitoring counts only free requests.
+func (o OpenRouterConfig) GetDailyRequestFreeOnly() bool {
+	if o.DailyRequestFreeOnly == nil {
+		return true
+	}
+	return *o.DailyRequestFreeOnly
+}
+
+// GetNotificationCooldown parses the cooldown string into a time.Duration.
+// Returns 6 hours if the value is empty or invalid.
+func (o OpenRouterConfig) GetNotificationCooldown() time.Duration {
+	return parseDurationWithDefault(o.NotificationCooldown, 6*time.Hour, "tasks.openrouter.notification_cooldown")
+}
+
+// GetInterval returns the task-specific interval if configured, otherwise the global default.
+func (o OpenRouterConfig) GetInterval(globalDefault time.Duration) time.Duration {
+	return parseDurationWithDefault(o.Interval, globalDefault, "tasks.openrouter.interval")
 }
 
 // NotifierConfig holds settings for the Apprise notification system.
