@@ -11,6 +11,10 @@ tasks:
     token: "ghp_xxxxxxxxxxxx" # Optional: GitHub Personal Access Token for higher rate limits
     stale_days: 4
     notification_cooldown: "24h"
+    # Alert when an open PR cannot be merged due to merge conflicts or merge blocks
+    # (branch protection / out of date with base). Applies to every monitored open PR,
+    # independent of staleness. Defaults to false.
+    monitor_merge_conflicts: true
     repositories:
       # Example 1: Monitor a repo for PRs by specific authors
       - owner: "owner1"

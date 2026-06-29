@@ -246,6 +246,7 @@ func runApp() {
 		log.Info().
 			Int("repository_count", len(githubCfg.Repositories)).
 			Int("stale_threshold_days", githubCfg.GetStaleDays()).
+			Bool("monitor_merge_conflicts", githubCfg.MonitorMergeConflicts).
 			Dur("interval", githubInterval).
 			Msg("GitHub monitoring enabled")
 

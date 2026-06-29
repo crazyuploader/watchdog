@@ -44,6 +44,27 @@ type PullRequest struct {
 
 	// Head represents the tip of the PR branch. We need the SHA to check CI status.
 	Head PRHead `json:"head"`
+
+	// Merged indicates whether the PR has already been merged into the base branch.
+	// Only the single-PR endpoint (GetPullRequest) populates this; the list endpoint does not.
+	Merged bool `json:"merged"`
+
+	// Mergeable reports whether GitHub can merge the PR cleanly.
+	// It is null until GitHub finishes computing mergeability in a background job (see GetPullRequest),
+	// and only the single-PR endpoint populates it. A pointer distinguishes "not computed" (nil) from false.
+	Mergeable *bool `json:"mergeable"`
+
+	// MergeableState is GitHub's detailed mergeability state. Common values:
+	//   - "clean":     mergeable, all required checks/reviews satisfied
+	//   - "dirty":     has merge conflicts (cannot be merged)
+	//   - "blocked":   blocked by branch protection (required reviews or status checks not satisfied)
+	//   - "behind":    head branch is out of date with the base and must be updated first
+	//   - "unstable":  mergeable, but non-required checks are failing
+	//   - "has_hooks": mergeable, with pre-receive hooks configured
+	//   - "draft":     blocked because the PR is a draft
+	//   - "unknown":   GitHub has not finished computing mergeability
+	// Only the single-PR endpoint populates this field.
+	MergeableState string `json:"mergeable_state"`
 }
 
 // PRHead represents the head of a pull request (the commit at the tip).
@@ -185,6 +206,83 @@ func (g *GitHubAPI) GetCheckSuites(ctx context.Context, owner, repo, ref string)
 	}
 
 	return &suites, nil
+}
+
+// mergeabilityComputeAttempts bounds how many times GetPullRequest re-requests a PR while GitHub
+// computes mergeability in the background (the `mergeable` field is null until the job finishes).
+const mergeabilityComputeAttempts = 3
+
+// mergeabilityComputeDelay is the wait between mergeability re-computation polls.
+// It is a var (not a const) so tests can shorten it.
+var mergeabilityComputeDelay = 2 * time.Second
+
+// GetPullRequest fetches a single pull request, including the merge-conflict and merge-block fields
+// (Merged, Mergeable, MergeableState) that the list endpoint does not populate.
+//
+// GitHub computes mergeability asynchronously: the first request after a change returns a null
+// `mergeable` value while a background job runs. This method re-requests the PR a few times until
+// the value settles, honoring ctx for cancellation. If mergeability is still unresolved after the
+// final attempt, the last response is returned with Mergeable == nil so callers can skip it.
+func (g *GitHubAPI) GetPullRequest(ctx context.Context, owner, repo string, number int) (*PullRequest, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/pulls/%d", g.BaseURL, owner, repo, number)
+
+	var pr *PullRequest
+	for attempt := 0; attempt < mergeabilityComputeAttempts; attempt++ {
+		var err error
+		pr, err = g.fetchPullRequest(ctx, url)
+		if err != nil {
+			return nil, err
+		}
+
+		// A non-null Mergeable means GitHub has finished computing mergeability (this is also the
+		// case for closed/merged PRs). A nil value means the background job is still running.
+		if pr.Mergeable != nil {
+			return pr, nil
+		}
+
+		// Wait before re-requesting, unless this was the final attempt.
+		if attempt < mergeabilityComputeAttempts-1 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(mergeabilityComputeDelay):
+			}
+		}
+	}
+
+	return pr, nil
+}
+
+// fetchPullRequest fetches a single pull request from the given URL.
+func (g *GitHubAPI) fetchPullRequest(ctx context.Context, url string) (*PullRequest, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	g.setCommonHeaders(req)
+
+	resp, err := DoWithRetry(ctx, DefaultHTTPClient, req, DefaultRetryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch pull request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("github api request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var pr PullRequest
+	if err := json.Unmarshal(body, &pr); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &pr, nil
 }
 
 // linkHeaderRegex parses the Link header to extract the next page URL.

@@ -7,7 +7,7 @@ A lightweight Go-based framework for monitoring various services and sending not
 - Framework for adding monitoring tasks
 - Currently supports:
   - Telnyx balance monitoring
-  - GitHub PR review monitoring (stale PR detection)
+  - GitHub PR review monitoring (stale PR detection, merge conflict/block detection)
   - External contributor PR monitoring
   - OpenRouter credit, usage-limit, and completed-day request monitoring
 - Apprise-compatible notifications
