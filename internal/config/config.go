@@ -239,10 +239,11 @@ type OpenRouterConfig struct {
 
 // GetBaseURL returns the base URL, defaulting to "https://openrouter.ai/api/v1".
 func (o OpenRouterConfig) GetBaseURL() string {
-	if o.BaseURL == "" {
+	baseURL := strings.TrimSpace(o.BaseURL)
+	if baseURL == "" {
 		return "https://openrouter.ai/api/v1"
 	}
-	return strings.TrimRight(o.BaseURL, "/")
+	return strings.TrimRight(baseURL, "/")
 }
 
 // GetUsageLimitRatio returns the usage limit ratio threshold.

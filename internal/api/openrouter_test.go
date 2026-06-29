@@ -175,7 +175,9 @@ func TestOpenRouterAPI_GetAuthKey_InvalidJSON(t *testing.T) {
 
 func TestOpenRouterAPI_GetAuthKey_Timeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(15 * time.Second)
+		// Sleep just long enough to outlast the 100ms client context below.
+		// A short sleep keeps server.Close() (which waits for in-flight handlers) fast.
+		time.Sleep(500 * time.Millisecond)
 	}))
 	defer server.Close()
 
@@ -303,7 +305,9 @@ func TestOpenRouterAPI_GetCredits_InvalidJSON(t *testing.T) {
 
 func TestOpenRouterAPI_GetCredits_Timeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(15 * time.Second)
+		// Sleep just long enough to outlast the 100ms client context below.
+		// A short sleep keeps server.Close() (which waits for in-flight handlers) fast.
+		time.Sleep(500 * time.Millisecond)
 	}))
 	defer server.Close()
 

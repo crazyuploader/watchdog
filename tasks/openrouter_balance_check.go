@@ -127,9 +127,6 @@ func NewOpenRouterBalanceCheckTaskWithOptions(opts OpenRouterBalanceCheckOptions
 
 // Run executes the credit monitoring logic.
 func (t *OpenRouterBalanceCheckTask) Run() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	var alerts []string
 	var remaining float64
 	var usage float64
@@ -137,7 +134,9 @@ func (t *OpenRouterBalanceCheckTask) Run() error {
 	hasUsage := false
 
 	if t.balanceThreshold > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		credits, err := t.apiClient.GetCredits(ctx)
+		cancel()
 		if err != nil {
 			return fmt.Errorf("failed to get credits: %w", err)
 		}
@@ -154,7 +153,9 @@ func (t *OpenRouterBalanceCheckTask) Run() error {
 	}
 
 	if t.usageLimitRatio > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		authKey, err := t.apiClient.GetAuthKey(ctx)
+		cancel()
 		if err != nil {
 			return fmt.Errorf("failed to get auth key info: %w", err)
 		}
@@ -198,7 +199,9 @@ func (t *OpenRouterBalanceCheckTask) Run() error {
 
 	if t.dailyRequestLimit > 0 && t.dailyRequestRatio > 0 {
 		activityDate := latestCompletedUTCDate(t.currentTime())
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		activity, err := t.apiClient.GetActivity(ctx, activityDate, t.activityAPIKeyHash)
+		cancel()
 		if err != nil {
 			return fmt.Errorf("failed to get activity for %s: %w", activityDate, err)
 		}
@@ -245,7 +248,10 @@ func (t *OpenRouterBalanceCheckTask) Run() error {
 			message += "- " + alert + "\n"
 		}
 
-		if err := t.notifier.SendNotification(ctx, subject, message); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := t.notifier.SendNotification(ctx, subject, message)
+		cancel()
+		if err != nil {
 			return fmt.Errorf("failed to send notification: %w", err)
 		}
 
