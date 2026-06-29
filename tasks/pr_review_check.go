@@ -116,6 +116,13 @@ func (t *PRReviewCheckTask) Run() error {
 				}
 			}
 
+			// Check whether the PR is blocked from merging (merge conflicts, branch protection,
+			// out of date with base). This is independent of staleness, so a freshly opened PR
+			// with conflicts is still flagged.
+			if t.config.MonitorMergeConflicts {
+				t.checkMergeConflict(ctx, repoConfig, pr)
+			}
+
 			// Check if PR is stale
 			// We use UpdatedAt (last activity time) rather than CreatedAt
 			// This way, PRs with recent comments/commits won't trigger alerts
@@ -224,4 +231,72 @@ func (t *PRReviewCheckTask) Run() error {
 
 	// Always return nil - we don't want task errors to stop the scheduler
 	return nil
+}
+
+// checkMergeConflict fetches the full PR detail and sends a notification if the PR is blocked from
+// being merged (merge conflicts, branch protection, or out of date with the base branch).
+// Errors are logged and swallowed so one PR's failure doesn't stop monitoring the rest.
+func (t *PRReviewCheckTask) checkMergeConflict(ctx context.Context, repoConfig config.RepositoryConfig, pr api.PullRequest) {
+	prID := fmt.Sprintf("%s/%s#%d", repoConfig.Owner, repoConfig.Repo, pr.Number)
+
+	// The list endpoint does not populate mergeability, so fetch the single PR. This also waits
+	// for GitHub to finish computing mergeability in the background.
+	detail, err := t.apiClient.GetPullRequest(ctx, repoConfig.Owner, repoConfig.Repo, pr.Number)
+	if err != nil {
+		log.Error().Err(err).Str("pr", prID).Msg("Failed to fetch PR mergeability")
+		return
+	}
+
+	// Skip already-merged PRs and PRs whose mergeability GitHub has not finished computing yet
+	// (Mergeable is nil). We'll re-evaluate on the next run.
+	if detail.Merged || detail.Mergeable == nil {
+		return
+	}
+
+	blocking, reason := mergeBlockReason(detail.MergeableState)
+	if !blocking {
+		return
+	}
+
+	// Use a separate cooldown namespace so merge-conflict alerts and stale-PR alerts for the same
+	// PR don't suppress each other.
+	cooldownKey := "merge:" + prID
+
+	t.mu.Lock()
+	lastTime, ok := t.lastNotificationTime[cooldownKey]
+	t.mu.Unlock()
+	if ok && time.Since(lastTime) < t.config.GetNotificationCooldown() {
+		return
+	}
+
+	subject := fmt.Sprintf("PR cannot be merged: %s", pr.Title)
+	message := fmt.Sprintf("PR #%d in %s/%s by %s %s.\nMergeable state: %s\nLink: %s",
+		pr.Number, repoConfig.Owner, repoConfig.Repo, pr.User.Login, reason,
+		detail.MergeableState, pr.HTMLURL)
+
+	log.Info().Str("pr", prID).Str("mergeable_state", detail.MergeableState).Msg("Sending notification for unmergeable PR")
+	if err := t.notifier.SendNotification(ctx, subject, message); err != nil {
+		log.Error().Err(err).Str("pr", prID).Msg("Failed to send merge-conflict notification")
+		return
+	}
+
+	t.mu.Lock()
+	t.lastNotificationTime[cooldownKey] = time.Now()
+	t.mu.Unlock()
+}
+
+// mergeBlockReason returns whether a PR's mergeable_state indicates it cannot be merged, along with
+// a human-readable reason. Non-blocking states ("clean", "unstable", "has_hooks", "draft") and the
+// not-yet-computed "unknown" state return blocking=false.
+func mergeBlockReason(state string) (blocking bool, reason string) {
+	switch state {
+	case "dirty":
+		return true, "has merge conflicts that must be resolved before it can be merged"
+	case "blocked":
+		return true, "is blocked from merging (required reviews or status checks are not satisfied)"
+	case "behind":
+		return true, "is out of date with the base branch and must be updated before it can be merged"
+	default:
+		return false, ""
+	}
 }

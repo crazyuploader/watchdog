@@ -266,3 +266,121 @@ func TestPullRequestJSON_Marshaling(t *testing.T) {
 	assert.Equal(t, pr.User.Login, decoded.User.Login)
 	assert.Equal(t, pr.Draft, decoded.Draft)
 }
+
+func TestGitHubAPI_GetPullRequest_Success(t *testing.T) {
+	tests := []struct {
+		name          string
+		mergeable     *bool
+		mergeState    string
+		merged        bool
+		wantMergeable bool
+		wantState     string
+	}{
+		{name: "clean mergeable", mergeable: boolPtr(true), mergeState: "clean", wantMergeable: true, wantState: "clean"},
+		{name: "dirty conflict", mergeable: boolPtr(false), mergeState: "dirty", wantMergeable: false, wantState: "dirty"},
+		{name: "blocked", mergeable: boolPtr(false), mergeState: "blocked", wantMergeable: false, wantState: "blocked"},
+		{name: "already merged", mergeable: boolPtr(false), mergeState: "unknown", merged: true, wantMergeable: false, wantState: "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "GET", r.Method)
+				assert.Equal(t, "/repos/testowner/testrepo/pulls/123", r.URL.Path)
+
+				pr := PullRequest{
+					Number:         123,
+					Title:          "Test PR",
+					User:           User{Login: "testuser"},
+					HTMLURL:        "https://github.com/testowner/testrepo/pull/123",
+					Merged:         tt.merged,
+					Mergeable:      tt.mergeable,
+					MergeableState: tt.mergeState,
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(pr)
+			}))
+			defer server.Close()
+
+			api := &GitHubAPI{BaseURL: server.URL, Token: "ghp_test"}
+
+			pr, err := api.GetPullRequest(context.Background(), "testowner", "testrepo", 123)
+			require.NoError(t, err)
+			require.NotNil(t, pr)
+			require.NotNil(t, pr.Mergeable)
+			assert.Equal(t, tt.wantMergeable, *pr.Mergeable)
+			assert.Equal(t, tt.wantState, pr.MergeableState)
+			assert.Equal(t, tt.merged, pr.Merged)
+		})
+	}
+}
+
+func TestGitHubAPI_GetPullRequest_BackgroundComputation(t *testing.T) {
+	// GitHub returns a null mergeable while it computes mergeability in the background.
+	// The client should re-request until a non-null value appears.
+	original := mergeabilityComputeDelay
+	mergeabilityComputeDelay = 10 * time.Millisecond
+	defer func() { mergeabilityComputeDelay = original }()
+
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		pr := PullRequest{Number: 7, MergeableState: "unknown"}
+		if calls >= 2 {
+			// Second call: computation finished, conflict detected.
+			pr.Mergeable = boolPtr(false)
+			pr.MergeableState = "dirty"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(pr)
+	}))
+	defer server.Close()
+
+	api := &GitHubAPI{BaseURL: server.URL}
+
+	pr, err := api.GetPullRequest(context.Background(), "owner", "repo", 7)
+	require.NoError(t, err)
+	require.NotNil(t, pr.Mergeable)
+	assert.False(t, *pr.Mergeable)
+	assert.Equal(t, "dirty", pr.MergeableState)
+	assert.GreaterOrEqual(t, calls, 2)
+}
+
+func TestGitHubAPI_GetPullRequest_NonOKStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer server.Close()
+
+	api := &GitHubAPI{BaseURL: server.URL}
+
+	pr, err := api.GetPullRequest(context.Background(), "owner", "repo", 999)
+	assert.Error(t, err)
+	assert.Nil(t, pr)
+}
+
+func TestGitHubAPI_GetPullRequest_ContextCancelledWhileComputing(t *testing.T) {
+	// Always returns null mergeable; the client should give up when the context expires
+	// during the wait between re-computation polls.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pr := PullRequest{Number: 1, MergeableState: "unknown"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(pr)
+	}))
+	defer server.Close()
+
+	api := &GitHubAPI{BaseURL: server.URL}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	pr, err := api.GetPullRequest(ctx, "owner", "repo", 1)
+	assert.Error(t, err)
+	assert.Nil(t, pr)
+}
+
+func boolPtr(b bool) *bool { return &b }

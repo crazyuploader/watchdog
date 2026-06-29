@@ -27,6 +27,14 @@ func (m *MockGitHubClient) GetOpenPullRequests(ctx context.Context, owner, repo 
 	return args.Get(0).([]api.PullRequest), args.Error(1)
 }
 
+func (m *MockGitHubClient) GetPullRequest(ctx context.Context, owner, repo string, number int) (*api.PullRequest, error) {
+	args := m.Called(ctx, owner, repo, number)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*api.PullRequest), args.Error(1)
+}
+
 func (m *MockGitHubClient) GetCommitStatus(ctx context.Context, owner, repo, ref string) (*api.CommitStatus, error) {
 	args := m.Called(ctx, owner, repo, ref)
 	if args.Get(0) == nil {
@@ -776,4 +784,151 @@ func TestPRReviewCheckTask_Run_ExactlyAtStaleThreshold(t *testing.T) {
 	assert.NoError(t, err)
 	// At exactly 4 days, should not trigger (needs to be > 4 days)
 	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func mergeBoolPtr(b bool) *bool { return &b }
+
+// freshPR returns a non-draft, non-stale PR so merge-conflict behavior can be tested in isolation
+// from staleness.
+func freshPR() api.PullRequest {
+	return api.PullRequest{
+		Number:    321,
+		Title:     "Conflicted PR",
+		User:      api.User{Login: "testuser"},
+		UpdatedAt: time.Now(), // fresh -> not stale
+		Draft:     false,
+		HTMLURL:   "https://github.com/testowner/testrepo/pull/321",
+		Head:      api.PRHead{SHA: "sha321"},
+	}
+}
+
+func TestPRReviewCheckTask_MergeConflict_Disabled_DoesNotFetchDetail(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays:             4,
+		MonitorMergeConflicts: false, // default
+		Repositories:          []config.RepositoryConfig{{Owner: "testowner", Repo: "testrepo"}},
+	}
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", mock.Anything, "testowner", "testrepo").Return([]api.PullRequest{freshPR()}, nil)
+
+	mockNotifier := &MockNotifier{}
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	require.NoError(t, task.Run())
+
+	mockAPI.AssertNotCalled(t, "GetPullRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestPRReviewCheckTask_MergeConflict_Dirty_SendsNotification(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays:             4,
+		MonitorMergeConflicts: true,
+		Repositories:          []config.RepositoryConfig{{Owner: "testowner", Repo: "testrepo"}},
+	}
+
+	pr := freshPR()
+	detail := pr
+	detail.Mergeable = mergeBoolPtr(false)
+	detail.MergeableState = "dirty"
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", mock.Anything, "testowner", "testrepo").Return([]api.PullRequest{pr}, nil)
+	mockAPI.On("GetPullRequest", mock.Anything, "testowner", "testrepo", 321).Return(&detail, nil)
+
+	mockNotifier := &MockNotifier{}
+	mockNotifier.On("SendNotification", mock.Anything, "PR cannot be merged: Conflicted PR", mock.MatchedBy(func(msg string) bool {
+		return strings.Contains(msg, "#321") &&
+			strings.Contains(msg, "merge conflicts") &&
+			strings.Contains(msg, "dirty")
+	})).Return(nil)
+
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	require.NoError(t, task.Run())
+
+	mockAPI.AssertExpectations(t)
+	mockNotifier.AssertExpectations(t)
+}
+
+func TestPRReviewCheckTask_MergeConflict_Clean_NoNotification(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays:             4,
+		MonitorMergeConflicts: true,
+		Repositories:          []config.RepositoryConfig{{Owner: "testowner", Repo: "testrepo"}},
+	}
+
+	pr := freshPR()
+	detail := pr
+	detail.Mergeable = mergeBoolPtr(true)
+	detail.MergeableState = "clean"
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", mock.Anything, "testowner", "testrepo").Return([]api.PullRequest{pr}, nil)
+	mockAPI.On("GetPullRequest", mock.Anything, "testowner", "testrepo", 321).Return(&detail, nil)
+
+	mockNotifier := &MockNotifier{}
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	require.NoError(t, task.Run())
+
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestPRReviewCheckTask_MergeConflict_StillComputing_NoNotification(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays:             4,
+		MonitorMergeConflicts: true,
+		Repositories:          []config.RepositoryConfig{{Owner: "testowner", Repo: "testrepo"}},
+	}
+
+	pr := freshPR()
+	detail := pr
+	detail.Mergeable = nil // GitHub hasn't finished computing
+	detail.MergeableState = "unknown"
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", mock.Anything, "testowner", "testrepo").Return([]api.PullRequest{pr}, nil)
+	mockAPI.On("GetPullRequest", mock.Anything, "testowner", "testrepo", 321).Return(&detail, nil)
+
+	mockNotifier := &MockNotifier{}
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	require.NoError(t, task.Run())
+
+	mockNotifier.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestPRReviewCheckTask_MergeConflict_CooldownSuppressesRepeat(t *testing.T) {
+	cfg := config.GitHubConfig{
+		StaleDays:             4,
+		MonitorMergeConflicts: true,
+		NotificationCooldown:  "24h",
+		Repositories:          []config.RepositoryConfig{{Owner: "testowner", Repo: "testrepo"}},
+	}
+
+	pr := freshPR()
+	detail := pr
+	detail.Mergeable = mergeBoolPtr(false)
+	detail.MergeableState = "blocked"
+
+	mockAPI := &MockGitHubClient{}
+	mockAPI.On("GetOpenPullRequests", mock.Anything, "testowner", "testrepo").Return([]api.PullRequest{pr}, nil)
+	mockAPI.On("GetPullRequest", mock.Anything, "testowner", "testrepo", 321).Return(&detail, nil)
+
+	mockNotifier := &MockNotifier{}
+	mockNotifier.On("SendNotification", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+	task := NewPRReviewCheckTask(cfg, mockNotifier)
+	task.apiClient = mockAPI
+
+	require.NoError(t, task.Run())
+	require.NoError(t, task.Run()) // second run within cooldown -> no second notification
+
+	mockNotifier.AssertNumberOfCalls(t, "SendNotification", 1)
 }

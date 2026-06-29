@@ -85,6 +85,11 @@ type GitHubConfig struct {
 	// NotificationCooldown prevents spam by limiting how often we notify about the same PR.
 	// Format: "24h", "2h30m", etc. Default is 24 hours.
 	NotificationCooldown string `mapstructure:"notification_cooldown"`
+
+	// MonitorMergeConflicts enables alerting when an open PR cannot be merged because it has
+	// merge conflicts or is blocked (e.g. by branch protection or being out of date with the base).
+	// This applies to every monitored open PR, independent of staleness. Defaults to false.
+	MonitorMergeConflicts bool `mapstructure:"monitor_merge_conflicts"`
 }
 
 // RepositoryConfig defines a specific GitHub repository to monitor.
